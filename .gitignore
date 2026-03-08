@@ -1,1 +1,30 @@
+# Build artifacts
 /target
+debug/
+*.d
+*.o
+*.so
+*.dylib
+
+# Cargo
+**/*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Temp files
+/tmp/
+*.tmp
