@@ -845,31 +845,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "locus"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "async-trait",
- "chrono",
- "clap",
- "futures",
- "jsonrpsee",
- "plexus-core",
- "plexus-macros 0.3.10",
- "plexus-transport",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1030,6 +1005,31 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "plexus-locus"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "async-trait",
+ "chrono",
+ "clap",
+ "futures",
+ "jsonrpsee",
+ "plexus-core",
+ "plexus-macros 0.3.10",
+ "plexus-transport",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

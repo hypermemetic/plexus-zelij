@@ -1,17 +1,17 @@
 [package]
-name = "locus"
+name = "plexus-locus"
 version = "0.1.0"
 edition = "2021"
 description = "Terminal workspace orchestration — standalone Plexus RPC server"
 license = "AGPL-3.0-only"
-default-run = "locus"
+default-run = "plexus-locus"
 
 [lib]
 name = "locus"
 path = "src/lib.rs"
 
 [[bin]]
-name = "locus"
+name = "plexus-locus"
 path = "src/main.rs"
 
 [dependencies]
