@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 default-run = "plexus-locus"
 
 [lib]
-name = "locus"
+name = "plexus_locus"
 path = "src/lib.rs"
 
 [[bin]]

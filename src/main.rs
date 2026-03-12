@@ -1,5 +1,5 @@
 use clap::Parser;
-use locus::{Locus, Zellij};
+use plexus_locus::{Locus, Zellij};
 use plexus_core::plexus::DynamicHub;
 use plexus_transport::TransportServer;
 use std::sync::Arc;
@@ -23,10 +23,10 @@ async fn main() -> anyhow::Result<()> {
 
     let filter = if args.stdio {
         tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("locus=warn"))
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("plexus_locus=warn"))
     } else {
         tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn,locus=debug"))
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn,plexus_locus=debug"))
     };
 
     tracing_subscriber::fmt()
