@@ -11,6 +11,25 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct PaneId(pub String);
 
+/// A pane reference — either a name or a %id. Must be resolved via
+/// `backend.resolve_pane()` before use. This type enforces that callers
+/// go through resolution rather than passing raw strings.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(transparent)]
+pub struct PaneRef(pub String);
+
+impl PaneRef {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for PaneRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Logical tab identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct TabId(pub String);
@@ -91,6 +110,10 @@ pub struct PaneOpts {
     /// Target tab (default: current)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tab: Option<String>,
+
+    /// Pane to split from (e.g. "%5"). Default: current/focused pane
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -136,6 +159,10 @@ pub struct RunOpts {
     /// Target session
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+
+    /// Pane to split from (e.g. "%5"). Default: current/focused pane
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
 }
 
 // ============================================================================
@@ -203,10 +230,33 @@ pub enum LocusEvent {
         command: String,
     },
 
+    /// A command was executed in an existing pane and confirmed running
+    CommandStarted {
+        pane: PaneId,
+        command: String,
+        capture: Option<String>,
+    },
+
+    /// A command ran and exited
+    CommandExited {
+        pane: PaneId,
+        command: String,
+        exit_code: Option<i32>,
+        capture: Option<String>,
+    },
+
     /// Input was sent to a pane
     InputSent {
         pane: PaneId,
         chars: u32,
+    },
+
+    /// Screen diff after sending a command to a foreign shell
+    ScreenDiff {
+        pane: PaneId,
+        before_lines: u32,
+        after_lines: u32,
+        new_content: String,
     },
 
     /// Action completed successfully

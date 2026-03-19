@@ -232,6 +232,11 @@ impl TerminalBackend for Zellij {
     // Panes
     // ========================================================================
 
+    async fn list_panes(&self, _session: Option<&str>, _tab: Option<&str>) -> BackendResult<Vec<Pane>> {
+        // Zellij CLI doesn't expose pane listing
+        Ok(Vec::new())
+    }
+
     async fn create_pane(&self, opts: &PaneOpts) -> BackendResult<Pane> {
         let mut args = vec!["action", "new-pane"];
 
@@ -278,7 +283,7 @@ impl TerminalBackend for Zellij {
         })
     }
 
-    async fn close_pane(&self) -> BackendResult<()> {
+    async fn close_pane(&self, _pane: Option<&str>) -> BackendResult<()> {
         self.exec(&["action", "close-pane"]).await?;
         Ok(())
     }
@@ -289,7 +294,7 @@ impl TerminalBackend for Zellij {
         Ok(())
     }
 
-    async fn rename_pane(&self, name: &str) -> BackendResult<()> {
+    async fn rename_pane(&self, name: &str, _pane: Option<&str>) -> BackendResult<()> {
         self.exec(&["action", "rename-pane", name]).await?;
         Ok(())
     }
@@ -304,7 +309,7 @@ impl TerminalBackend for Zellij {
         Ok(())
     }
 
-    async fn resize_pane(&self, direction: Direction, _amount: Option<u32>) -> BackendResult<()> {
+    async fn resize_pane(&self, direction: Direction, _amount: Option<u32>, _pane: Option<&str>) -> BackendResult<()> {
         self.exec(&["action", "resize", direction.as_str()]).await?;
         Ok(())
     }
@@ -313,13 +318,13 @@ impl TerminalBackend for Zellij {
     // Input / Output
     // ========================================================================
 
-    async fn write_chars(&self, chars: &str, session: Option<&str>) -> BackendResult<()> {
+    async fn write_chars(&self, chars: &str, session: Option<&str>, _pane: Option<&str>) -> BackendResult<()> {
         self.exec_session(session, &["action", "write-chars", chars])
             .await?;
         Ok(())
     }
 
-    async fn dump_screen(&self, path: &str, full_scrollback: bool) -> BackendResult<String> {
+    async fn dump_screen(&self, path: &str, full_scrollback: bool, _pane: Option<&str>) -> BackendResult<String> {
         let mut args = vec!["action", "dump-screen", path];
         if full_scrollback {
             args.push("--full");

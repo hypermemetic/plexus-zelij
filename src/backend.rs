@@ -63,23 +63,51 @@ pub trait TerminalBackend: Send + Sync + 'static {
     // Panes
     // ========================================================================
 
+    /// Resolve a pane identifier (name or %id) to a tmux-style %id.
+    /// Validates that the pane actually exists in both cases.
+    async fn resolve_pane(&self, pane: &str) -> BackendResult<String> {
+        let panes = self.list_panes(None, None).await?;
+        if pane.starts_with('%') {
+            // Validate %id exists
+            if panes.iter().any(|p| p.id.0 == pane) {
+                Ok(pane.to_string())
+            } else {
+                Err(BackendError::PaneNotFound(pane.to_string()))
+            }
+        } else {
+            // Lookup by name
+            panes.iter()
+                .find(|p| p.name.as_deref() == Some(pane))
+                .map(|p| p.id.0.clone())
+                .ok_or_else(|| BackendError::PaneNotFound(pane.to_string()))
+        }
+    }
+
+    /// Check if a pane still exists
+    async fn pane_exists(&self, pane_id: &str) -> bool {
+        self.list_panes(None, None).await
+            .map(|panes| panes.iter().any(|p| p.id.0 == pane_id))
+            .unwrap_or(false)
+    }
+
+    async fn list_panes(&self, session: Option<&str>, tab: Option<&str>) -> BackendResult<Vec<Pane>>;
     async fn create_pane(&self, opts: &PaneOpts) -> BackendResult<Pane>;
-    async fn close_pane(&self) -> BackendResult<()>;
+    async fn close_pane(&self, pane: Option<&str>) -> BackendResult<()>;
     async fn focus_pane(&self, direction: Direction) -> BackendResult<()>;
-    async fn rename_pane(&self, name: &str) -> BackendResult<()>;
+    async fn rename_pane(&self, name: &str, pane: Option<&str>) -> BackendResult<()>;
     async fn toggle_floating(&self) -> BackendResult<()>;
     async fn toggle_fullscreen(&self) -> BackendResult<()>;
-    async fn resize_pane(&self, direction: Direction, amount: Option<u32>) -> BackendResult<()>;
+    async fn resize_pane(&self, direction: Direction, amount: Option<u32>, pane: Option<&str>) -> BackendResult<()>;
 
     // ========================================================================
     // Input / Output
     // ========================================================================
 
-    /// Send keystrokes to the focused pane
-    async fn write_chars(&self, chars: &str, session: Option<&str>) -> BackendResult<()>;
+    /// Send keystrokes to a pane (specific pane by ID, or focused if None)
+    async fn write_chars(&self, chars: &str, session: Option<&str>, pane: Option<&str>) -> BackendResult<()>;
 
-    /// Capture the screen content of the current pane
-    async fn dump_screen(&self, path: &str, full_scrollback: bool) -> BackendResult<String>;
+    /// Capture the screen content of a pane (specific pane by ID, or focused if None)
+    async fn dump_screen(&self, path: &str, full_scrollback: bool, pane: Option<&str>) -> BackendResult<String>;
 
     /// Dump the current layout definition
     async fn dump_layout(&self) -> BackendResult<String>;

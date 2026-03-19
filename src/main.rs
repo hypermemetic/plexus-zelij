@@ -1,5 +1,5 @@
 use clap::Parser;
-use plexus_locus::{Locus, Zellij};
+use plexus_locus::{Locus, TmuxBackend, Zellij};
 use plexus_core::plexus::DynamicHub;
 use plexus_transport::TransportServer;
 use std::sync::Arc;
@@ -15,6 +15,10 @@ struct Args {
     /// Port for WebSocket server
     #[arg(short, long, default_value = "4448")]
     port: u16,
+
+    /// Terminal backend: auto, tmux, zellij
+    #[arg(long, default_value = "auto")]
+    backend: String,
 }
 
 #[tokio::main]
@@ -34,13 +38,41 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    // Build the Locus activation with Zellij backend
-    let locus = Locus::new(Zellij::new());
+    // Build sub-activations with selected backend
+    let locus = match args.backend.as_str() {
+        "tmux" => {
+            tracing::info!("Using tmux backend");
+            Locus::new(TmuxBackend::new())
+        }
+        "zellij" => {
+            tracing::info!("Using zellij backend");
+            Locus::new(Zellij::new())
+        }
+        _ => {
+            // Auto-detect: $TMUX → tmux, $ZELLIJ_SESSION_NAME → zellij, else tmux
+            if std::env::var("TMUX").is_ok() {
+                tracing::info!("Auto-detected tmux backend");
+                Locus::new(TmuxBackend::new())
+            } else if std::env::var("ZELLIJ_SESSION_NAME").is_ok() {
+                tracing::info!("Auto-detected zellij backend");
+                Locus::new(Zellij::new())
+            } else {
+                tracing::info!("No multiplexer detected, defaulting to tmux backend");
+                Locus::new(TmuxBackend::new())
+            }
+        }
+    };
 
-    // Wrap in a DynamicHub so it's a standalone Plexus RPC server
+    // Register sub-activations flat on the DynamicHub for clean routing:
+    //   synapse locus sessions list
+    //   synapse locus panes capture --pane %5
+    //   synapse locus info status
     let hub = Arc::new(
         DynamicHub::new("locus")
-            .register(locus)
+            .register(locus.sessions)
+            .register(locus.tabs)
+            .register(locus.panes)
+            .register(locus.info)
     );
 
     let rpc_converter = |arc| {
