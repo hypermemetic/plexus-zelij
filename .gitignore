@@ -28,3 +28,4 @@ debug/
 # Temp files
 /tmp/
 *.tmp
+bin/
