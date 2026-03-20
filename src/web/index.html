@@ -825,13 +825,15 @@
                 paneDiv.style.width = `${paneWidth}px`;
                 paneDiv.style.height = `${paneHeight}px`;
 
-                // Update content only if changed
+                // Update content only if changed OR if contentDiv is empty
                 const contentDiv = document.getElementById(`tmux-pane-content-${pane.id}`);
                 if (contentDiv) {
                     const paneContent = await fetchPaneContent(pane.id);
                     if (paneContent) {
                         const cachedContent = paneContentCache.get(`tmux-${pane.id}`);
-                        if (cachedContent !== paneContent.html) {
+                        const needsUpdate = cachedContent !== paneContent.html || contentDiv.innerHTML === '';
+
+                        if (needsUpdate) {
                             const wasAtBottom = contentDiv.scrollHeight - contentDiv.scrollTop - contentDiv.clientHeight < 50;
                             contentDiv.innerHTML = paneContent.html;
                             paneContentCache.set(`tmux-${pane.id}`, paneContent.html);
