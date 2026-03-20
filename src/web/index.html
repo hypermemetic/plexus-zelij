@@ -11,6 +11,11 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --terminal-font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+            --terminal-font-size: 11px;
+        }
+
         body {
             background: #1a1a1a;
             color: #d4d4d4;
@@ -20,81 +25,101 @@
         }
 
         #header {
-            background: #2d2d2d;
-            border-bottom: 2px solid #3d3d3d;
-            padding: 12px 20px;
+            background: #0a0a0a;
+            border-bottom: 1px solid #333;
+            padding: 4px 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-size: 11px;
         }
 
         #header h1 {
-            font-size: 18px;
-            font-weight: 600;
-            color: #4ec9b0;
+            font-size: 11px;
+            font-weight: normal;
+            color: #00ff00;
+            margin: 0;
         }
 
         #header-right {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 12px;
+        }
+
+        #font-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #font-controls label {
+            font-size: 10px;
+            color: #666;
+        }
+
+        #font-controls select {
+            background: #000;
+            color: #aaa;
+            border: 1px solid #333;
+            border-radius: 0;
+            padding: 2px 4px;
+            font-size: 10px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        #font-controls select:hover {
+            border-color: #666;
         }
 
         #view-switcher {
             display: flex;
-            gap: 8px;
-            background: #1a1a1a;
-            padding: 4px;
-            border-radius: 6px;
+            gap: 0;
         }
 
         .view-btn {
-            padding: 6px 12px;
+            padding: 2px 8px;
             background: transparent;
-            color: #888;
-            border: none;
-            border-radius: 4px;
+            color: #666;
+            border: 1px solid #333;
+            border-radius: 0;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 10px;
             font-family: inherit;
-            transition: all 0.2s;
+        }
+
+        .view-btn + .view-btn {
+            border-left: none;
         }
 
         .view-btn:hover {
-            color: #d4d4d4;
-            background: #2d2d2d;
+            color: #aaa;
         }
 
         .view-btn.active {
-            background: #4ec9b0;
-            color: #000;
-            font-weight: 600;
+            background: #1a1a1a;
+            color: #00ff00;
         }
 
         #status {
             display: flex;
             align-items: center;
-            gap: 12px;
-            font-size: 12px;
-            color: #888;
+            gap: 8px;
+            font-size: 10px;
+            color: #666;
         }
 
         .status-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #4ec9b0;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+            width: 4px;
+            height: 4px;
+            border-radius: 0;
+            background: #00ff00;
         }
 
         .view-container {
             display: none;
-            height: calc(100vh - 50px);
+            height: calc(100vh - 23px);
         }
 
         .view-container.active {
@@ -104,8 +129,8 @@
         /* Grid View Styles */
         #grid-panes-container {
             display: grid;
-            gap: 8px;
-            padding: 8px;
+            gap: 2px;
+            padding: 0;
             height: 100%;
             overflow: auto;
         }
@@ -118,8 +143,8 @@
 
         .pane {
             background: #000;
-            border: 2px solid #3d3d3d;
-            border-radius: 6px;
+            border: 1px solid #333;
+            border-radius: 0;
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -127,60 +152,57 @@
         }
 
         .pane-header {
-            background: #2d2d2d;
-            padding: 8px 12px;
-            font-size: 11px;
-            color: #888;
-            border-bottom: 1px solid #3d3d3d;
+            background: #0a0a0a;
+            padding: 2px 6px;
+            font-size: 10px;
+            color: #666;
+            border-bottom: 1px solid #222;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .pane-id {
-            color: #569cd6;
-            font-weight: 600;
+            color: #888;
+            font-weight: normal;
         }
 
         .pane-name {
-            color: #ce9178;
+            color: #666;
         }
 
         .download-btn {
-            background: #4ec9b0;
-            color: #000;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 3px;
+            background: transparent;
+            color: #444;
+            border: 1px solid #333;
+            padding: 1px 4px;
+            border-radius: 0;
             cursor: pointer;
-            font-size: 10px;
+            font-size: 9px;
             font-family: inherit;
-            font-weight: 600;
-            transition: all 0.2s;
+            font-weight: normal;
         }
 
         .download-btn:hover {
-            background: #5ed9c0;
-            transform: scale(1.05);
-        }
-
-        .download-btn:active {
-            transform: scale(0.95);
+            color: #888;
+            border-color: #555;
         }
 
         .download-btn.downloading {
-            background: #888;
+            color: #666;
             cursor: wait;
         }
 
         .pane-content {
             flex: 1;
-            padding: 8px;
+            padding: 4px;
             overflow: auto;
-            font-size: 13px;
-            line-height: 1.4;
+            font-size: var(--terminal-font-size);
+            line-height: 1.3;
             white-space: pre;
-            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-family: var(--terminal-font-family);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         /* Tmux Layout View Styles */
@@ -193,33 +215,31 @@
 
         #tmux-tabs {
             display: flex;
-            background: #2d2d2d;
-            border-bottom: 1px solid #3d3d3d;
+            background: #0a0a0a;
+            border-bottom: 1px solid #222;
             overflow-x: auto;
         }
 
         .tmux-tab {
-            padding: 8px 16px;
-            background: #1a1a1a;
-            color: #888;
-            border-right: 1px solid #3d3d3d;
+            padding: 2px 8px;
+            background: transparent;
+            color: #666;
+            border-right: 1px solid #222;
             cursor: pointer;
             white-space: nowrap;
-            font-size: 12px;
-            transition: all 0.2s;
+            font-size: 10px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
         }
 
         .tmux-tab:hover {
-            background: #252525;
+            background: #111;
         }
 
         .tmux-tab.active {
-            background: #4ec9b0;
-            color: #000;
-            font-weight: 600;
+            background: #1a1a1a;
+            color: #00ff00;
         }
 
         #tmux-panes {
@@ -231,18 +251,18 @@
         .tmux-pane {
             position: absolute;
             background: #000;
-            border: 1px solid #4ec9b0;
+            border: 1px solid #333;
             overflow: hidden;
             display: flex;
             flex-direction: column;
         }
 
         .tmux-pane-title {
-            background: #2d2d2d;
-            color: #4ec9b0;
-            padding: 4px 8px;
+            background: #0a0a0a;
+            color: #666;
+            padding: 2px 6px;
             font-size: 10px;
-            border-bottom: 1px solid #4ec9b0;
+            border-bottom: 1px solid #222;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -250,12 +270,14 @@
 
         .tmux-pane-content {
             flex: 1;
-            padding: 4px 8px;
+            padding: 4px;
             overflow: auto;
-            font-size: 12px;
+            font-size: var(--terminal-font-size);
             line-height: 1.3;
             white-space: pre;
-            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-family: var(--terminal-font-family);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .terminal-line {
@@ -302,6 +324,29 @@
     <div id="header">
         <h1>🖥️ Locus Terminal Viewer</h1>
         <div id="header-right">
+            <div id="font-controls">
+                <label for="font-family">Font:</label>
+                <select id="font-family">
+                    <option value="'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Consolas', monospace">JetBrains Mono</option>
+                    <option value="'Fira Code', 'Monaco', 'Menlo', 'Consolas', monospace">Fira Code</option>
+                    <option value="'Monaco', 'Menlo', 'Consolas', monospace">Monaco</option>
+                    <option value="'Menlo', 'Consolas', monospace">Menlo</option>
+                    <option value="'Consolas', monospace">Consolas</option>
+                    <option value="'SF Mono', monospace">SF Mono</option>
+                    <option value="'Courier New', monospace">Courier New</option>
+                </select>
+                <label for="font-size">Size:</label>
+                <select id="font-size">
+                    <option value="9px">9px</option>
+                    <option value="10px">10px</option>
+                    <option value="11px" selected>11px</option>
+                    <option value="12px">12px</option>
+                    <option value="13px">13px</option>
+                    <option value="14px">14px</option>
+                    <option value="15px">15px</option>
+                    <option value="16px">16px</option>
+                </select>
+            </div>
             <div id="view-switcher">
                 <button class="view-btn active" data-view="grid">Grid View</button>
                 <button class="view-btn" data-view="tmux">Tmux Layout</button>
@@ -343,6 +388,47 @@
         let lastTabStructure = null; // Track tab structure to avoid unnecessary re-renders
         let sessionsData = {}; // Store sessions data globally
         let isRenderingPanes = false; // Prevent concurrent pane renders
+
+        // Font and size controls
+        function applyFontSettings(fontFamily, fontSize) {
+            document.documentElement.style.setProperty('--terminal-font-family', fontFamily);
+            document.documentElement.style.setProperty('--terminal-font-size', fontSize);
+
+            // Save to localStorage
+            localStorage.setItem('terminal-font-family', fontFamily);
+            localStorage.setItem('terminal-font-size', fontSize);
+        }
+
+        // Load saved settings or use defaults
+        function loadFontSettings() {
+            const savedFamily = localStorage.getItem('terminal-font-family');
+            const savedSize = localStorage.getItem('terminal-font-size');
+
+            if (savedFamily) {
+                document.getElementById('font-family').value = savedFamily;
+                document.documentElement.style.setProperty('--terminal-font-family', savedFamily);
+            }
+
+            if (savedSize) {
+                document.getElementById('font-size').value = savedSize;
+                document.documentElement.style.setProperty('--terminal-font-size', savedSize);
+            }
+        }
+
+        // Font family selector
+        document.getElementById('font-family').addEventListener('change', (e) => {
+            const fontSize = document.getElementById('font-size').value;
+            applyFontSettings(e.target.value, fontSize);
+        });
+
+        // Font size selector
+        document.getElementById('font-size').addEventListener('change', (e) => {
+            const fontFamily = document.getElementById('font-family').value;
+            applyFontSettings(fontFamily, e.target.value);
+        });
+
+        // Load settings on page load
+        loadFontSettings();
 
         // View switcher
         document.querySelectorAll('.view-btn').forEach(btn => {
