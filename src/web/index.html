@@ -339,6 +339,7 @@
         let currentView = 'grid';
         let currentSession = null;
         let currentTab = null;
+        let currentTmuxPanes = new Set();
 
         // View switcher
         document.querySelectorAll('.view-btn').forEach(btn => {
@@ -693,7 +694,7 @@
 
         async function renderTmuxPanes(panes) {
             const container = document.getElementById('tmux-panes');
-            container.innerHTML = '';
+            const newPaneIds = new Set(panes.map(p => p.id));
 
             // Calculate layout (simple grid for now)
             const containerWidth = container.clientWidth;
@@ -703,53 +704,78 @@
             const paneWidth = containerWidth / cols;
             const paneHeight = containerHeight / rows;
 
+            // Remove panes that no longer exist
+            for (const oldId of currentTmuxPanes) {
+                if (!newPaneIds.has(oldId)) {
+                    const oldPane = document.getElementById(`tmux-pane-${oldId}`);
+                    if (oldPane) oldPane.remove();
+                    currentTmuxPanes.delete(oldId);
+                }
+            }
+
+            // Add or update panes
             for (let i = 0; i < panes.length; i++) {
                 const pane = panes[i];
                 const row = Math.floor(i / cols);
                 const col = i % cols;
 
-                const paneDiv = document.createElement('div');
-                paneDiv.className = 'tmux-pane';
+                let paneDiv = document.getElementById(`tmux-pane-${pane.id}`);
+
+                if (!paneDiv) {
+                    // Create new pane
+                    paneDiv = document.createElement('div');
+                    paneDiv.className = 'tmux-pane';
+                    paneDiv.id = `tmux-pane-${pane.id}`;
+
+                    const title = document.createElement('div');
+                    title.className = 'tmux-pane-title';
+                    title.style.display = 'flex';
+                    title.style.justifyContent = 'space-between';
+                    title.style.alignItems = 'center';
+
+                    const titleText = document.createElement('span');
+                    titleText.textContent = `${pane.id}`;
+
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'download-btn';
+                    downloadBtn.textContent = '💾';
+                    downloadBtn.title = 'Download pane recording';
+                    downloadBtn.onclick = () => downloadPane(pane.id);
+
+                    title.appendChild(titleText);
+                    title.appendChild(downloadBtn);
+
+                    const content = document.createElement('div');
+                    content.className = 'tmux-pane-content';
+                    content.id = `tmux-pane-content-${pane.id}`;
+
+                    paneDiv.appendChild(title);
+                    paneDiv.appendChild(content);
+                    container.appendChild(paneDiv);
+                    currentTmuxPanes.add(pane.id);
+                }
+
+                // Update position (layout might change)
                 paneDiv.style.left = `${col * paneWidth}px`;
                 paneDiv.style.top = `${row * paneHeight}px`;
                 paneDiv.style.width = `${paneWidth}px`;
                 paneDiv.style.height = `${paneHeight}px`;
 
-                const title = document.createElement('div');
-                title.className = 'tmux-pane-title';
-                title.style.display = 'flex';
-                title.style.justifyContent = 'space-between';
-                title.style.alignItems = 'center';
-
-                const titleText = document.createElement('span');
-                titleText.textContent = `${pane.id} ${pane.name || ''}`;
-
-                const downloadBtn = document.createElement('button');
-                downloadBtn.className = 'download-btn';
-                downloadBtn.textContent = '💾';
-                downloadBtn.title = 'Download pane recording';
-                downloadBtn.onclick = () => downloadPane(pane.id);
-
-                title.appendChild(titleText);
-                title.appendChild(downloadBtn);
-
-                const content = document.createElement('div');
-                content.className = 'tmux-pane-content';
-                content.id = `tmux-pane-content-${pane.id}`;
-
-                paneDiv.appendChild(title);
-                paneDiv.appendChild(content);
-                container.appendChild(paneDiv);
-
-                // Fetch and render content with caching to prevent flashing
-                const paneContent = await fetchPaneContent(pane.id);
-                if (paneContent) {
-                    const cachedContent = paneContentCache.get(`tmux-${pane.id}`);
-                    if (cachedContent !== paneContent.html) {
-                        content.innerHTML = paneContent.html;
-                        paneContentCache.set(`tmux-${pane.id}`, paneContent.html);
-                        // Auto-scroll to bottom only on content change
-                        content.scrollTo({ top: content.scrollHeight, behavior: 'instant' });
+                // Update content only if changed
+                const contentDiv = document.getElementById(`tmux-pane-content-${pane.id}`);
+                if (contentDiv) {
+                    const paneContent = await fetchPaneContent(pane.id);
+                    if (paneContent) {
+                        const cachedContent = paneContentCache.get(`tmux-${pane.id}`);
+                        if (cachedContent !== paneContent.html) {
+                            const wasAtBottom = contentDiv.scrollHeight - contentDiv.scrollTop - contentDiv.clientHeight < 50;
+                            contentDiv.innerHTML = paneContent.html;
+                            paneContentCache.set(`tmux-${pane.id}`, paneContent.html);
+                            // Auto-scroll to bottom only if was at bottom
+                            if (wasAtBottom || contentDiv.scrollTop === 0) {
+                                contentDiv.scrollTo({ top: contentDiv.scrollHeight, behavior: 'instant' });
+                            }
+                        }
                     }
                 }
             }

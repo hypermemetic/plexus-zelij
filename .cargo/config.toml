@@ -1,0 +1,15 @@
+# Cargo configuration for plexus-locus
+
+[build]
+# Treat all warnings as errors to enforce code quality
+# This is enabled by default for strict development.
+# To disable temporarily: RUSTFLAGS="" cargo build
+# rustflags = ["-D", "warnings"]
+
+# Alternative: Only deny specific important warnings
+rustflags = [
+    "-D", "unused-must-use",
+    "-D", "unused-imports",
+    "-D", "unused-variables",
+    "-D", "dead-code",
+]

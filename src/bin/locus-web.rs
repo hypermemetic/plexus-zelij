@@ -20,10 +20,10 @@ use futures::stream::{self, Stream};
 use plexus_locus::{
     backend::TerminalBackend,
     backends::tmux::TmuxBackend,
-    recording::{engine::PaneRecorder, RecordingSession},
+    cast::{CastEvent, CastHeader, CastWriter},
 };
 use serde::Serialize;
-use std::{collections::HashMap, convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashMap, convert::Infallible, net::SocketAddr, path::{Path, PathBuf}, sync::Arc, time::{Duration, SystemTime, UNIX_EPOCH}};
 use tokio::sync::RwLock;
 
 /// Shared app state
@@ -132,6 +132,37 @@ async fn main() -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
+
+    Ok(())
+}
+
+/// Write screen content to a .cast file
+///
+/// Creates a .cast file with the screen content as a single Output event at timestamp 0.0
+async fn write_screen_to_cast(
+    path: impl AsRef<Path>,
+    content: &str,
+    width: u16,
+    height: u16,
+    title: Option<String>,
+) -> anyhow::Result<()> {
+    let header = CastHeader {
+        version: 2,
+        width,
+        height,
+        timestamp: Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64),
+        env: None,
+        title,
+        idle_time_limit: None,
+        theme: None,
+    };
+
+    let mut writer = CastWriter::create(path)?;
+    writer.write_header(&header)?;
+
+    // Write the screen content as a single output event at time 0.0
+    writer.write_event(&CastEvent::Output(0.0, content.to_string()))?;
+    writer.finish()?;
 
     Ok(())
 }
@@ -279,54 +310,43 @@ async fn layout_handler(
 
 /// Download a single pane recording as .cast file
 async fn download_pane_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     axum::extract::Path(pane_id): axum::extract::Path<String>,
 ) -> Result<Response, StatusCode> {
-    tracing::info!("Downloading pane recording: {}", pane_id);
+    tracing::info!("Downloading pane snapshot: {}", pane_id);
 
-    // Create temporary directory for recording
-    let tmp_dir = format!("/tmp/locus-download-{}", uuid::Uuid::new_v4());
-    let tmp_path = PathBuf::from(&tmp_dir);
-    if let Err(e) = tokio::fs::create_dir_all(&tmp_path).await {
-        tracing::error!("Failed to create temp dir: {}", e);
+    // Create temporary file for the .cast
+    let tmp_path = std::env::temp_dir().join(format!("pane-{}.cast", uuid::Uuid::new_v4()));
+
+    // Capture current screen state
+    let tmp_screen = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
+    let content = match state.backend.dump_screen(&tmp_screen, true, Some(&pane_id)).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("Failed to capture pane {}: {}", pane_id, e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        },
+    };
+    let _ = tokio::fs::remove_file(&tmp_screen).await;
+
+    // Write .cast file with current screen state
+    if let Err(e) = write_screen_to_cast(&tmp_path, &content, 80, 24, Some(format!("Pane {}", pane_id))).await {
+        tracing::error!("Failed to write .cast file: {}", e);
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    // Start recording the pane
-    let recorder = match PaneRecorder::start(pane_id.clone(), &tmp_path, 80, 24, None).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!("Failed to start recording for pane {}: {}", pane_id, e);
-            let _ = tokio::fs::remove_dir_all(&tmp_path).await;
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        },
-    };
-
-    // Record for 5 seconds
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    // Stop recording
-    let cast_path = match recorder.stop().await {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::error!("Failed to stop recording for pane {}: {}", pane_id, e);
-            let _ = tokio::fs::remove_dir_all(&tmp_path).await;
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        },
-    };
-
     // Read the .cast file
-    let cast_content = match tokio::fs::read(&cast_path).await {
+    let cast_content = match tokio::fs::read(&tmp_path).await {
         Ok(c) => c,
         Err(e) => {
             tracing::error!("Failed to read .cast file: {}", e);
-            let _ = tokio::fs::remove_dir_all(&tmp_path).await;
+            let _ = tokio::fs::remove_file(&tmp_path).await;
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         },
     };
 
     // Cleanup
-    let _ = tokio::fs::remove_dir_all(&tmp_path).await;
+    let _ = tokio::fs::remove_file(&tmp_path).await;
 
     // Return as downloadable file
     let filename = format!("pane-{}.cast", pane_id.replace('%', ""));
@@ -342,12 +362,39 @@ async fn download_pane_handler(
 
 /// Download a tab composite recording as .cast file
 async fn download_tab_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     axum::extract::Path((session, tab_index)): axum::extract::Path<(String, String)>,
 ) -> Result<Response, StatusCode> {
-    tracing::info!("Downloading tab composite: {}:{}", session, tab_index);
+    tracing::info!("Downloading tab snapshot: {}:{}", session, tab_index);
 
-    // Create temporary directory for recording
+    // Parse tab index (validate but not used yet - TODO: filter panes by tab)
+    let _tab_idx: u32 = match tab_index.parse() {
+        Ok(idx) => idx,
+        Err(_) => {
+            tracing::error!("Invalid tab index: {}", tab_index);
+            return Err(StatusCode::BAD_REQUEST);
+        },
+    };
+
+    // Get panes for this tab
+    let panes = match state.backend.list_panes(Some(&session), None).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("Failed to list panes: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        },
+    };
+
+    // Filter panes for this tab (we'd need tab info - for now just use all panes)
+    // TODO: Filter by actual tab index when backend supports it
+    let tab_panes = panes;
+
+    if tab_panes.is_empty() {
+        tracing::error!("No panes found for tab {}", tab_index);
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Create temporary directory for .cast files
     let tmp_dir = format!("/tmp/locus-download-{}", uuid::Uuid::new_v4());
     let tmp_path = PathBuf::from(&tmp_dir);
     if let Err(e) = tokio::fs::create_dir_all(&tmp_path).await {
@@ -355,33 +402,37 @@ async fn download_tab_handler(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    // Start recording session for the tab
-    let recording_session = match RecordingSession::start(&session, &tmp_path).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!("Failed to start recording session: {}", e);
-            let _ = tokio::fs::remove_dir_all(&tmp_path).await;
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        },
-    };
+    // Capture each pane and create .cast file
+    for pane in &tab_panes {
+        let tmp_screen = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
+        let content = match state.backend.dump_screen(&tmp_screen, true, Some(&pane.id.0)).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("Failed to capture pane {}: {}", pane.id.0, e);
+                continue;
+            },
+        };
+        let _ = tokio::fs::remove_file(&tmp_screen).await;
 
-    // Record for 5 seconds
-    tokio::time::sleep(Duration::from_secs(5)).await;
+        let pane_id_clean = pane.id.0.trim_start_matches('%');
+        let cast_path = tmp_path.join(format!("pane-{}.cast", pane_id_clean));
 
-    // Stop recording
-    let cast_files = match recording_session.stop().await {
-        Ok(files) => files,
-        Err(e) => {
-            tracing::error!("Failed to stop recording session: {}", e);
-            let _ = tokio::fs::remove_dir_all(&tmp_path).await;
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        },
-    };
+        if let Err(e) = write_screen_to_cast(&cast_path, &content, 80, 24, Some(format!("Pane {}", pane.id.0))).await {
+            tracing::error!("Failed to write .cast for pane {}: {}", pane.id.0, e);
+            continue;
+        }
+    }
 
     // If only one pane, return it directly
+    let cast_files: Vec<PathBuf> = std::fs::read_dir(&tmp_path)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("cast"))
+        .collect();
+
     if cast_files.len() == 1 {
-        let cast_path = &cast_files[0];
-        let cast_content = match tokio::fs::read(cast_path).await {
+        let cast_content = match tokio::fs::read(&cast_files[0]).await {
             Ok(c) => c,
             Err(e) => {
                 tracing::error!("Failed to read .cast file: {}", e);
@@ -449,12 +500,26 @@ async fn download_tab_handler(
 
 /// Download a session composite recording as .cast file (all tabs)
 async fn download_session_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     axum::extract::Path(session): axum::extract::Path<String>,
 ) -> Result<Response, StatusCode> {
-    tracing::info!("Downloading session composite: {}", session);
+    tracing::info!("Downloading session snapshot: {}", session);
 
-    // Create temporary directory for recording
+    // Get all panes in the session
+    let panes = match state.backend.list_panes(Some(&session), None).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("Failed to list panes for session {}: {}", session, e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        },
+    };
+
+    if panes.is_empty() {
+        tracing::error!("No panes found in session {}", session);
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Create temporary directory for .cast files
     let tmp_dir = format!("/tmp/locus-download-{}", uuid::Uuid::new_v4());
     let tmp_path = PathBuf::from(&tmp_dir);
     if let Err(e) = tokio::fs::create_dir_all(&tmp_path).await {
@@ -462,33 +527,37 @@ async fn download_session_handler(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    // Start recording session
-    let recording_session = match RecordingSession::start(&session, &tmp_path).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!("Failed to start recording session: {}", e);
-            let _ = tokio::fs::remove_dir_all(&tmp_path).await;
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        },
-    };
+    // Capture each pane and create .cast file
+    for pane in &panes {
+        let tmp_screen = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
+        let content = match state.backend.dump_screen(&tmp_screen, true, Some(&pane.id.0)).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("Failed to capture pane {}: {}", pane.id.0, e);
+                continue;
+            },
+        };
+        let _ = tokio::fs::remove_file(&tmp_screen).await;
 
-    // Record for 5 seconds
-    tokio::time::sleep(Duration::from_secs(5)).await;
+        let pane_id_clean = pane.id.0.trim_start_matches('%');
+        let cast_path = tmp_path.join(format!("pane-{}.cast", pane_id_clean));
 
-    // Stop recording
-    let cast_files = match recording_session.stop().await {
-        Ok(files) => files,
-        Err(e) => {
-            tracing::error!("Failed to stop recording session: {}", e);
-            let _ = tokio::fs::remove_dir_all(&tmp_path).await;
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        },
-    };
+        if let Err(e) = write_screen_to_cast(&cast_path, &content, 80, 24, Some(format!("Pane {}", pane.id.0))).await {
+            tracing::error!("Failed to write .cast for pane {}: {}", pane.id.0, e);
+            continue;
+        }
+    }
 
     // If only one pane, return it directly
+    let cast_files: Vec<PathBuf> = std::fs::read_dir(&tmp_path)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("cast"))
+        .collect();
+
     if cast_files.len() == 1 {
-        let cast_path = &cast_files[0];
-        let cast_content = match tokio::fs::read(cast_path).await {
+        let cast_content = match tokio::fs::read(&cast_files[0]).await {
             Ok(c) => c,
             Err(e) => {
                 tracing::error!("Failed to read .cast file: {}", e);
