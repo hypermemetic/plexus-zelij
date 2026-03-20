@@ -1,0 +1,31 @@
+{
+  "workspaces": {
+    "demo": {
+      "tabs": [
+        {
+          "name": "hello-grid",
+          "layout": [2, 2],
+          "panes": [
+            { "name": "top-left", "command": "echo 'hello from top-left'" },
+            { "name": "top-right", "command": "echo 'hello from top-right'" },
+            { "name": "bottom-left", "command": "echo 'hello from bottom-left'" },
+            { "name": "bottom-right", "command": "echo 'hello from bottom-right'" }
+          ]
+        }
+      ]
+    },
+    "dev": {
+      "tabs": [
+        {
+          "name": "gamma",
+          "layout": [1, 3],
+          "panes": [
+            { "name": "claude", "command": "claude-container -s synapse-cc-ux --continue" },
+            { "name": "watch", "command": "claude-container watch -s synapse-cc-ux --repo plexus-gamma -- claude-container pull -s synapse-cc-ux --repo plexus-gamma" },
+            { "name": "dev-server", "command": "bun dev", "cwd": "../plexus-gamma" }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -165,6 +165,15 @@ pub struct RunOpts {
     pub target: Option<String>,
 }
 
+/// Result of a single operation in a batch
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct BatchEntry {
+    pub pane: PaneId,
+    pub command: String,
+    pub output: Option<String>,
+    pub success: bool,
+}
+
 // ============================================================================
 // Enums
 // ============================================================================
@@ -209,7 +218,7 @@ pub enum LocusEvent {
     PaneCreated { pane: Pane },
 
     /// A tab was created
-    TabCreated { tab: Tab },
+    TabCreated { tab: Tab, initial_pane: Option<PaneId> },
 
     /// A session was created
     SessionCreated { session: Session },
@@ -249,6 +258,19 @@ pub enum LocusEvent {
     InputSent {
         pane: PaneId,
         chars: u32,
+    },
+
+    /// A grid layout was created with multiple panes
+    LayoutCreated {
+        tab: TabId,
+        panes: Vec<Pane>,
+        rows: u32,
+        cols: u32,
+    },
+
+    /// Batch results from multiple pane operations
+    BatchResult {
+        results: Vec<BatchEntry>,
     },
 
     /// Screen diff after sending a command to a foreign shell

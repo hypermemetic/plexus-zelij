@@ -13,7 +13,7 @@ struct Args {
     stdio: bool,
 
     /// Port for WebSocket server
-    #[arg(short, long, default_value = "4448")]
+    #[arg(short, long, default_value = "44480")]
     port: u16,
 
     /// Terminal backend: auto, tmux, zellij
@@ -72,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
             .register(locus.sessions)
             .register(locus.tabs)
             .register(locus.panes)
+            .register(locus.workspace)
             .register(locus.info)
     );
 

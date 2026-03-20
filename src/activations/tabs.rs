@@ -69,7 +69,17 @@ impl TabsActivation {
                 session,
             };
             match backend.create_tab(&opts).await {
-                Ok(tab) => yield LocusEvent::TabCreated { tab },
+                Ok(tab) => {
+                    // Find the initial pane in the new tab
+                    let initial_pane = backend.list_panes(None, None).await
+                        .ok()
+                        .and_then(|panes| {
+                            panes.iter()
+                                .find(|p| p.tab == tab.id)
+                                .map(|p| p.id.clone())
+                        });
+                    yield LocusEvent::TabCreated { tab, initial_pane };
+                }
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }

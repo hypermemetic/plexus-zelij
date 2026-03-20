@@ -791,6 +791,269 @@ impl PanesActivation {
             }
         }
     }
+
+    #[plexus_macros::hub_method(
+        description = "Create a grid layout of panes in a new tab. Returns all pane IDs. Optionally runs a command in each cell.",
+        params(
+            rows = "Number of rows",
+            cols = "Number of columns",
+            tab = "Tab name (created automatically)",
+            commands = "Commands to run in each cell (left-to-right, top-to-bottom). Fewer commands than cells is OK.",
+            cwd = "Working directory for all panes",
+            names = "Names for each pane (same order as commands)"
+        )
+    )]
+    async fn layout(
+        &self,
+        rows: u32,
+        cols: u32,
+        tab: Option<String>,
+        commands: Option<Vec<String>>,
+        cwd: Option<String>,
+        names: Option<Vec<String>>,
+    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+        let backend = self.backend.clone();
+        stream! {
+            if rows == 0 || cols == 0 {
+                yield LocusEvent::Error { message: "rows and cols must be > 0".into() };
+                return;
+            }
+
+            // Create tab
+            let tab_opts = crate::types::TabOpts {
+                name: tab.clone(),
+                layout: None,
+                cwd: cwd.as_ref().map(|s| s.into()),
+                session: None,
+            };
+            let tab_result = match backend.create_tab(&tab_opts).await {
+                Ok(t) => t,
+                Err(e) => {
+                    yield LocusEvent::Error { message: format!("Failed to create tab: {}", e) };
+                    return;
+                }
+            };
+            let tab_id = tab_result.id.clone();
+
+            // Find the initial pane in the new tab
+            let initial_pane = match backend.list_panes(None, None).await {
+                Ok(panes) => {
+                    match panes.iter().find(|p| p.tab == tab_id) {
+                        Some(p) => p.id.0.clone(),
+                        None => {
+                            yield LocusEvent::Error { message: "Could not find initial pane in new tab".into() };
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    yield LocusEvent::Error { message: e.to_string() };
+                    return;
+                }
+            };
+
+            // Build grid: first create rows by splitting down, then split each row right
+            let mut left_column: Vec<String> = vec![initial_pane];
+
+            // Split down (rows - 1) times from the initial pane
+            for i in 1..rows {
+                let target = &left_column[i as usize - 1];
+                let opts = PaneOpts {
+                    direction: Some(Direction::Down),
+                    target: Some(target.clone()),
+                    cwd: cwd.as_ref().map(|s| s.into()),
+                    ..Default::default()
+                };
+                match backend.create_pane(&opts).await {
+                    Ok(p) => left_column.push(p.id.0.clone()),
+                    Err(e) => {
+                        yield LocusEvent::Error { message: format!("Failed to create row {}: {}", i, e) };
+                        return;
+                    }
+                }
+            }
+
+            // For each row, split right (cols - 1) times
+            // Grid order: row-major (left to right, top to bottom)
+            let mut all_panes: Vec<Vec<String>> = Vec::new();
+            for row_idx in 0..rows {
+                let mut row_panes = vec![left_column[row_idx as usize].clone()];
+                for col_idx in 1..cols {
+                    let target = &row_panes[col_idx as usize - 1];
+                    let opts = PaneOpts {
+                        direction: Some(Direction::Right),
+                        target: Some(target.clone()),
+                        cwd: cwd.as_ref().map(|s| s.into()),
+                        ..Default::default()
+                    };
+                    match backend.create_pane(&opts).await {
+                        Ok(p) => row_panes.push(p.id.0.clone()),
+                        Err(e) => {
+                            yield LocusEvent::Error { message: format!("Failed to create pane [{},{}]: {}", row_idx, col_idx, e) };
+                            return;
+                        }
+                    }
+                }
+                all_panes.push(row_panes);
+            }
+
+            // Flatten to row-major order
+            let flat_panes: Vec<String> = all_panes.iter().flatten().cloned().collect();
+            let cmds = commands.unwrap_or_default();
+            let pane_names = names.unwrap_or_default();
+
+            // Name panes and send commands
+            for (i, pane_id) in flat_panes.iter().enumerate() {
+                if let Some(name) = pane_names.get(i) {
+                    let _ = backend.rename_pane(name, Some(pane_id)).await;
+                }
+                if let Some(cmd) = cmds.get(i) {
+                    if !cmd.is_empty() {
+                        let _ = backend.write_chars(cmd, None, Some(pane_id)).await;
+                        let _ = backend.write_chars("Enter", None, Some(pane_id)).await;
+                    }
+                }
+            }
+
+            // Build Pane descriptors for the response
+            let pane_list: Vec<Pane> = flat_panes.iter().enumerate().map(|(i, id)| {
+                let row = i as u32 / cols;
+                let col = i as u32 % cols;
+                Pane {
+                    id: PaneId(id.clone()),
+                    name: pane_names.get(i).cloned(),
+                    command: cmds.get(i).cloned(),
+                    cwd: cwd.as_ref().map(|s| s.into()),
+                    floating: false,
+                    focused: row == 0 && col == 0,
+                    tab: tab_id.clone(),
+                    session: SessionId("current".into()),
+                }
+            }).collect();
+
+            yield LocusEvent::LayoutCreated {
+                tab: tab_id,
+                panes: pane_list,
+                rows,
+                cols,
+            };
+        }
+    }
+
+    #[plexus_macros::hub_method(
+        description = "Run commands in multiple panes in parallel. Each command is sent via send (screen-diff based, works in any shell).",
+        params(
+            panes = "Pane names or IDs",
+            commands = "Commands to run (one per pane, same order)",
+            settle_ms = "Time to wait for each command to settle (default: 500ms)"
+        )
+    )]
+    async fn batch(
+        &self,
+        panes: Vec<PaneRef>,
+        commands: Vec<String>,
+        settle_ms: Option<u64>,
+    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+        let backend = self.backend.clone();
+        stream! {
+            if panes.len() != commands.len() {
+                yield LocusEvent::Error {
+                    message: format!("panes count ({}) != commands count ({})", panes.len(), commands.len()),
+                };
+                return;
+            }
+
+            let settle = std::time::Duration::from_millis(settle_ms.unwrap_or(500));
+            let mut results: Vec<BatchEntry> = Vec::new();
+
+            for (pane_ref, command) in panes.iter().zip(commands.iter()) {
+                let pane_id = match backend.resolve_pane(pane_ref.as_str()).await {
+                    Ok(id) => id,
+                    Err(e) => {
+                        results.push(BatchEntry {
+                            pane: PaneId(pane_ref.0.clone()),
+                            command: command.clone(),
+                            output: Some(e.to_string()),
+                            success: false,
+                        });
+                        continue;
+                    }
+                };
+                let target = Some(pane_id.as_str());
+
+                // Capture before
+                let before = {
+                    let tmp = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
+                    backend.dump_screen(&tmp, false, target).await
+                        .map(|c| { let _ = std::fs::remove_file(&tmp); c })
+                        .unwrap_or_default()
+                };
+
+                // Send command
+                let send_ok = backend.write_chars(command, None, target).await.is_ok()
+                    && backend.write_chars("Enter", None, target).await.is_ok();
+
+                if !send_ok {
+                    results.push(BatchEntry {
+                        pane: PaneId(pane_id),
+                        command: command.clone(),
+                        output: Some("Failed to send command".into()),
+                        success: false,
+                    });
+                    continue;
+                }
+
+                // Wait for quiescence
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                let timeout = std::time::Duration::from_secs(10);
+                let start = std::time::Instant::now();
+                let mut last_content = before.clone();
+                let mut last_change = std::time::Instant::now();
+
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    if start.elapsed() > timeout { break; }
+
+                    let current = {
+                        let tmp = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
+                        backend.dump_screen(&tmp, false, target).await
+                            .map(|c| { let _ = std::fs::remove_file(&tmp); c })
+                            .unwrap_or_default()
+                    };
+
+                    if current != last_content {
+                        last_content = current;
+                        last_change = std::time::Instant::now();
+                    } else if last_change.elapsed() >= settle {
+                        break;
+                    }
+                }
+
+                // Diff
+                let before_lines: Vec<&str> = before.lines().collect();
+                let after_lines: Vec<&str> = last_content.lines().collect();
+                let new_content = if after_lines.len() > before_lines.len() {
+                    after_lines[before_lines.len()..].join("\n")
+                } else {
+                    let mut first_diff = 0;
+                    for (i, (a, b)) in before_lines.iter().zip(after_lines.iter()).enumerate() {
+                        if a != b { first_diff = i; break; }
+                        first_diff = i + 1;
+                    }
+                    after_lines[first_diff..].join("\n")
+                };
+
+                results.push(BatchEntry {
+                    pane: PaneId(pane_id),
+                    command: command.clone(),
+                    output: Some(new_content),
+                    success: true,
+                });
+            }
+
+            yield LocusEvent::BatchResult { results };
+        }
+    }
 }
 
 #[async_trait]

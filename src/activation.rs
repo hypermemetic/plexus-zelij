@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use crate::activations::{InfoActivation, PanesActivation, SessionsActivation, TabsActivation};
+use crate::activations::{
+    InfoActivation, PanesActivation, SessionsActivation, TabsActivation, WorkspaceActivation,
+};
 use crate::backend::TerminalBackend;
 
 /// Locus — terminal workspace orchestration.
@@ -10,11 +12,13 @@ use crate::backend::TerminalBackend;
 ///   synapse locus sessions list
 ///   synapse locus tabs list
 ///   synapse locus panes capture --pane %5
+///   synapse locus workspace up --workspace dev
 ///   synapse locus info status
 pub struct Locus {
     pub sessions: SessionsActivation,
     pub tabs: TabsActivation,
     pub panes: PanesActivation,
+    pub workspace: WorkspaceActivation,
     pub info: InfoActivation,
 }
 
@@ -25,6 +29,7 @@ impl Locus {
             sessions: SessionsActivation::new(backend.clone()),
             tabs: TabsActivation::new(backend.clone()),
             panes: PanesActivation::new(backend.clone()),
+            workspace: WorkspaceActivation::new(backend.clone()),
             info: InfoActivation::new(backend),
         }
     }
