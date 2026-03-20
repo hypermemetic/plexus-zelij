@@ -1,9 +1,9 @@
 //! Demo recording test - creates an actual visual recording
 //!
-//! Run with: cargo test --test demo_recording -- --ignored --nocapture
+//! Run with: cargo test --test `demo_recording` -- --ignored --nocapture
 
-use plexus_locus::recording::{RecordingSession, LayoutJournal};
-use plexus_locus::compositor::{CompositeWriter, CompositeOpts, BorderStyle};
+use plexus_locus::compositor::{BorderStyle, CompositeOpts, CompositeWriter};
+use plexus_locus::recording::{LayoutJournal, RecordingSession};
 use std::time::Instant;
 use tokio::time::{sleep, Duration};
 
@@ -13,7 +13,7 @@ async fn demo_multi_pane_recording() -> anyhow::Result<()> {
     let session_name = "cast-demo";
     let output_dir = "/tmp/cast-demo";
 
-    println!("\n🎬 Recording session '{}'", session_name);
+    println!("\n🎬 Recording session '{session_name}'");
     let start_time = Instant::now();
 
     // Create layout journal

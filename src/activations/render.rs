@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crate::compositor::{BorderStyle, CompositeOpts, CompositeWriter, Compositor};
 use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
-use crate::types::*;
+use crate::types::RenderEvent;
 
 /// Render sub-activation — manages rendering recordings to composite .cast files.
 ///
@@ -15,12 +15,18 @@ use crate::types::*;
 #[derive(Clone)]
 pub struct RenderActivation;
 
+impl Default for RenderActivation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RenderActivation {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 
-    /// Resolve recording directory from either recording_dir or recording_id.
+    /// Resolve recording directory from either `recording_dir` or `recording_id`.
     fn resolve_recording_dir(
         recording_dir: Option<String>,
         recording_id: Option<String>,
@@ -32,9 +38,7 @@ impl RenderActivation {
             let home = std::env::var("HOME")
                 .or_else(|_| std::env::var("USERPROFILE"))
                 .unwrap_or_else(|_| ".".to_string());
-            Ok(PathBuf::from(home)
-                .join(".local/share/locus/recordings")
-                .join(id))
+            Ok(PathBuf::from(home).join(".local/share/locus/recordings").join(id))
         } else {
             // Use most recent recording
             Self::find_most_recent_recording()
@@ -53,8 +57,8 @@ impl RenderActivation {
         }
 
         let mut recordings: Vec<_> = std::fs::read_dir(&recordings_dir)
-            .map_err(|e| format!("Failed to read recordings directory: {}", e))?
-            .filter_map(|entry| entry.ok())
+            .map_err(|e| format!("Failed to read recordings directory: {e}"))?
+            .filter_map(std::result::Result::ok)
             .filter(|entry| entry.path().is_dir())
             .filter_map(|entry| {
                 let file_name = entry.file_name();
@@ -141,8 +145,7 @@ impl RenderActivation {
                 idle_time_limit: Some(idle_time_limit.unwrap_or(2.0)),
                 border_style: border_style
                     .as_ref()
-                    .map(|s| Self::parse_border_style(s))
-                    .unwrap_or(BorderStyle::Single),
+                    .map_or(BorderStyle::Single, |s| Self::parse_border_style(s)),
                 title: None,
                 theme: None,
             };
@@ -197,12 +200,12 @@ impl RenderActivation {
                             }
                             Ok(Err(e)) => {
                                 yield RenderEvent::Error {
-                                    message: format!("Compositor error: {}", e),
+                                    message: format!("Compositor error: {e}"),
                                 };
                             }
                             Err(e) => {
                                 yield RenderEvent::Error {
-                                    message: format!("Task error: {}", e),
+                                    message: format!("Task error: {e}"),
                                 };
                             }
                         }
@@ -275,12 +278,12 @@ impl RenderActivation {
                 }
                 Ok(Err(e)) => {
                     yield RenderEvent::Error {
-                        message: format!("Preview error: {}", e),
+                        message: format!("Preview error: {e}"),
                     };
                 }
                 Err(e) => {
                     yield RenderEvent::Error {
-                        message: format!("Task error: {}", e),
+                        message: format!("Task error: {e}"),
                     };
                 }
             }
@@ -340,8 +343,7 @@ impl RenderActivation {
                 let duration_secs = compositor
                     .timeline()
                     .last()
-                    .map(|(t, _)| *t)
-                    .unwrap_or(0.0);
+                    .map_or(0.0, |(t, _)| *t);
 
                 // Count layout events
                 let layout_events = compositor.layout_event_count() as u32;
@@ -365,12 +367,12 @@ impl RenderActivation {
                 }
                 Ok(Err(e)) => {
                     yield RenderEvent::Error {
-                        message: format!("Info error: {}", e),
+                        message: format!("Info error: {e}"),
                     };
                 }
                 Err(e) => {
                     yield RenderEvent::Error {
-                        message: format!("Task error: {}", e),
+                        message: format!("Task error: {e}"),
                     };
                 }
             }
@@ -380,7 +382,7 @@ impl RenderActivation {
 
 #[async_trait]
 impl ChildRouter for RenderActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "render"
     }
 

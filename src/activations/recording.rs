@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use crate::backend::TerminalBackend;
 use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
 use crate::recording::{LayoutJournal, RecordingSession};
-use crate::types::*;
+use crate::types::{RecordingInfo, RecordingEvent};
 
 /// Recording sub-activation — manages terminal session recordings.
 ///
@@ -32,10 +32,7 @@ pub(crate) struct ActiveRecording {
 
 impl RecordingActivation {
     pub fn new(backend: Arc<dyn TerminalBackend>) -> Self {
-        Self {
-            backend,
-            active_recording: Arc::new(Mutex::new(None)),
-        }
+        Self { backend, active_recording: Arc::new(Mutex::new(None)) }
     }
 
     /// Generate a recording ID as ISO 8601 compact timestamp
@@ -49,9 +46,7 @@ impl RecordingActivation {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home)
-            .join(".local/share/locus/recordings")
-            .join(recording_id)
+        PathBuf::from(home).join(".local/share/locus/recordings").join(recording_id)
     }
 
     /// List past recordings by scanning the recordings directory
@@ -167,7 +162,7 @@ impl RecordingActivation {
                     }
                     Err(e) => {
                         yield RecordingEvent::Error {
-                            message: format!("Failed to list sessions: {}", e),
+                            message: format!("Failed to list sessions: {e}"),
                         };
                         return;
                     }
@@ -194,7 +189,7 @@ impl RecordingActivation {
                             // Write initial snapshot
                             if let Err(e) = journal.snapshot(&session_id).await {
                                 yield RecordingEvent::Error {
-                                    message: format!("Failed to write initial layout snapshot: {}", e),
+                                    message: format!("Failed to write initial layout snapshot: {e}"),
                                 };
                                 return;
                             }
@@ -220,14 +215,14 @@ impl RecordingActivation {
                         }
                         Err(e) => {
                             yield RecordingEvent::Error {
-                                message: format!("Failed to create layout journal: {}", e),
+                                message: format!("Failed to create layout journal: {e}"),
                             };
                         }
                     }
                 }
                 Err(e) => {
                     yield RecordingEvent::Error {
-                        message: format!("Failed to start recording: {}", e),
+                        message: format!("Failed to start recording: {e}"),
                     };
                 }
             }
@@ -236,9 +231,7 @@ impl RecordingActivation {
 
     #[plexus_macros::hub_method(
         description = "Stop the active recording",
-        params(
-            recording_id = "Recording ID to stop (default: active recording)"
-        )
+        params(recording_id = "Recording ID to stop (default: active recording)")
     )]
     async fn stop(
         &self,
@@ -271,7 +264,7 @@ impl RecordingActivation {
                     // Close the journal
                     if let Err(e) = active.journal.close() {
                         yield RecordingEvent::Error {
-                            message: format!("Failed to close layout journal: {}", e),
+                            message: format!("Failed to close layout journal: {e}"),
                         };
                     }
 
@@ -295,7 +288,7 @@ impl RecordingActivation {
                         }
                         Err(e) => {
                             yield RecordingEvent::Error {
-                                message: format!("Failed to stop recording: {}", e),
+                                message: format!("Failed to stop recording: {e}"),
                             };
                         }
                     }
@@ -309,9 +302,7 @@ impl RecordingActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
-        description = "Get status of the active recording"
-    )]
+    #[plexus_macros::hub_method(description = "Get status of the active recording")]
     async fn status(&self) -> impl Stream<Item = RecordingEvent> + Send + 'static {
         let active_recording = self.active_recording.clone();
 
@@ -345,9 +336,7 @@ impl RecordingActivation {
 
     #[plexus_macros::hub_method(
         description = "Manually trigger a layout snapshot",
-        params(
-            recording_id = "Recording ID (default: active recording)"
-        )
+        params(recording_id = "Recording ID (default: active recording)")
     )]
     async fn snapshot_layout(
         &self,
@@ -378,7 +367,7 @@ impl RecordingActivation {
                         }
                         Err(e) => {
                             yield RecordingEvent::Error {
-                                message: format!("Failed to write layout snapshot: {}", e),
+                                message: format!("Failed to write layout snapshot: {e}"),
                             };
                         }
                     }
@@ -392,9 +381,7 @@ impl RecordingActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
-        description = "List past recordings"
-    )]
+    #[plexus_macros::hub_method(description = "List past recordings")]
     async fn list(&self) -> impl Stream<Item = RecordingEvent> + Send + 'static {
         stream! {
             let recordings = Self::list_recordings().await;
@@ -405,7 +392,7 @@ impl RecordingActivation {
 
 #[async_trait]
 impl ChildRouter for RecordingActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "recording"
     }
 

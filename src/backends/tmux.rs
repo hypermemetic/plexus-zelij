@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use tokio::process::Command;
 
-use crate::backend::*;
-use crate::types::*;
+use crate::backend::{BackendResult, BackendError, TerminalBackend};
+use crate::types::{Session, SessionId, SessionOpts, Tab, TabId, TabOpts, Pane, PaneId, PaneOpts, Direction, RunOpts};
 
 /// Tmux backend — controls tmux via its CLI.
 ///
@@ -10,7 +10,7 @@ use crate::types::*;
 /// Detects its own pane via `$TMUX_PANE` to prevent self-destruction.
 pub struct TmuxBackend {
     bin: String,
-    /// The pane ID of the process running locus (from $TMUX_PANE).
+    /// The pane ID of the process running locus (from $`TMUX_PANE`).
     /// Operations that would kill this pane are refused.
     self_pane: Option<String>,
 }
@@ -18,10 +18,7 @@ pub struct TmuxBackend {
 impl TmuxBackend {
     pub fn new() -> Self {
         let self_pane = std::env::var("TMUX_PANE").ok();
-        Self {
-            bin: "tmux".to_string(),
-            self_pane,
-        }
+        Self { bin: "tmux".to_string(), self_pane }
     }
 
     /// Run a tmux command, return stdout on success
@@ -58,7 +55,7 @@ impl Default for TmuxBackend {
 
 #[async_trait]
 impl TerminalBackend for TmuxBackend {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "tmux"
     }
 
@@ -185,7 +182,7 @@ impl TerminalBackend for TmuxBackend {
         }
 
         let output = self.exec(&args).await?;
-        let parts: Vec<&str> = output.trim().split_whitespace().collect();
+        let parts: Vec<&str> = output.split_whitespace().collect();
 
         let session_id = SessionId(opts.session.clone().unwrap_or_else(|| "current".into()));
         Ok(Tab {
@@ -200,9 +197,9 @@ impl TerminalBackend for TmuxBackend {
 
     async fn close_tab(&self, session: Option<&str>, index: u32) -> BackendResult<()> {
         let target = if let Some(s) = session {
-            format!("{}:{}", s, index)
+            format!("{s}:{index}")
         } else {
-            format!(":{}", index)
+            format!(":{index}")
         };
         self.exec(&["kill-window", "-t", &target]).await?;
         Ok(())
@@ -210,9 +207,9 @@ impl TerminalBackend for TmuxBackend {
 
     async fn focus_tab(&self, session: Option<&str>, index: u32) -> BackendResult<()> {
         let target = if let Some(s) = session {
-            format!("{}:{}", s, index)
+            format!("{s}:{index}")
         } else {
-            format!(":{}", index)
+            format!(":{index}")
         };
         self.exec(&["select-window", "-t", &target]).await?;
         Ok(())
@@ -220,9 +217,9 @@ impl TerminalBackend for TmuxBackend {
 
     async fn rename_tab(&self, session: Option<&str>, index: u32, name: &str) -> BackendResult<()> {
         let target = if let Some(s) = session {
-            format!("{}:{}", s, index)
+            format!("{s}:{index}")
         } else {
-            format!(":{}", index)
+            format!(":{index}")
         };
         self.exec(&["rename-window", "-t", &target, name]).await?;
         Ok(())
@@ -232,7 +229,11 @@ impl TerminalBackend for TmuxBackend {
     // Panes
     // ========================================================================
 
-    async fn list_panes(&self, session: Option<&str>, _tab: Option<&str>) -> BackendResult<Vec<Pane>> {
+    async fn list_panes(
+        &self,
+        session: Option<&str>,
+        _tab: Option<&str>,
+    ) -> BackendResult<Vec<Pane>> {
         let format = "#{pane_id} #{pane_title} #{pane_current_command} #{pane_current_path} #{pane_active} #{window_id} #{window_index} #{session_name}";
         let mut args = vec!["list-panes", "-F", format];
 
@@ -276,19 +277,17 @@ impl TerminalBackend for TmuxBackend {
 
     async fn create_pane(&self, opts: &PaneOpts) -> BackendResult<Pane> {
         // -d: don't switch focus to the new pane
-        let mut args = vec!["split-window", "-d", "-P", "-F", "#{pane_id} #{window_id} #{session_name}"];
+        let mut args =
+            vec!["split-window", "-d", "-P", "-F", "#{pane_id} #{window_id} #{session_name}"];
 
         // Direction: -h for horizontal split (left/right), default is vertical (up/down)
         match opts.direction {
-            Some(Direction::Left) | Some(Direction::Right) => args.push("-h"),
-            _ => {} // vertical split is default
+            Some(Direction::Left | Direction::Right) => args.push("-h"),
+            _ => {}, // vertical split is default
         }
 
         // For "before" splits (up/left)
-        match opts.direction {
-            Some(Direction::Up) | Some(Direction::Left) => args.push("-b"),
-            _ => {}
-        }
+        if let Some(Direction::Up | Direction::Left) = opts.direction { args.push("-b") }
 
         // Target pane to split from (most specific wins)
         let pane_target;
@@ -310,7 +309,7 @@ impl TerminalBackend for TmuxBackend {
         }
 
         let output = self.exec(&args).await?;
-        let parts: Vec<&str> = output.trim().split_whitespace().collect();
+        let parts: Vec<&str> = output.split_whitespace().collect();
 
         let pane_id_str = parts.first().unwrap_or(&"").to_string();
         let tab_id = TabId(parts.get(1).unwrap_or(&"current").to_string());
@@ -453,7 +452,7 @@ impl TerminalBackend for TmuxBackend {
         // Also write to the path for compatibility with the trait contract
         tokio::fs::write(path, &content)
             .await
-            .map_err(|e| BackendError::CommandFailed(format!("Failed to write capture: {}", e)))?;
+            .map_err(|e| BackendError::CommandFailed(format!("Failed to write capture: {e}")))?;
 
         Ok(content)
     }
@@ -470,16 +469,11 @@ impl TerminalBackend for TmuxBackend {
     async fn run_command(&self, opts: &RunOpts) -> BackendResult<Pane> {
         // split-window with command: splits and runs in one step
         // -d: don't steal focus from the current pane
-        let mut args = vec!["split-window", "-d", "-P", "-F", "#{pane_id} #{window_id} #{session_name}"];
+        let mut args =
+            vec!["split-window", "-d", "-P", "-F", "#{pane_id} #{window_id} #{session_name}"];
 
-        match opts.direction {
-            Some(Direction::Left) | Some(Direction::Right) => args.push("-h"),
-            _ => {}
-        }
-        match opts.direction {
-            Some(Direction::Up) | Some(Direction::Left) => args.push("-b"),
-            _ => {}
-        }
+        if let Some(Direction::Left | Direction::Right) = opts.direction { args.push("-h") }
+        if let Some(Direction::Up | Direction::Left) = opts.direction { args.push("-b") }
 
         // Target pane to split from (most specific wins)
         let pane_target;
@@ -504,7 +498,7 @@ impl TerminalBackend for TmuxBackend {
         args.push(&opts.command);
 
         let output = self.exec(&args).await?;
-        let parts: Vec<&str> = output.trim().split_whitespace().collect();
+        let parts: Vec<&str> = output.split_whitespace().collect();
 
         let pane_id = PaneId(parts.first().unwrap_or(&"").to_string());
         let tab_id = TabId(parts.get(1).unwrap_or(&"current").to_string());

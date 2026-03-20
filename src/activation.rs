@@ -9,7 +9,7 @@ use crate::backend::TerminalBackend;
 /// Locus — terminal workspace orchestration.
 ///
 /// This is the factory that creates all sub-activations sharing the same backend.
-/// Sub-activations are registered directly with the DynamicHub for flat routing:
+/// Sub-activations are registered directly with the `DynamicHub` for flat routing:
 ///   synapse locus sessions list
 ///   synapse locus tabs list
 ///   synapse locus panes capture --pane %5

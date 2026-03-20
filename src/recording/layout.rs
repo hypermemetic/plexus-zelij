@@ -48,44 +48,24 @@ pub struct PaneGeometry {
 }
 
 /// Layout change events.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LayoutEvent {
     /// A new pane was created
-    PaneOpened {
-        pane_id: String,
-        x: u16,
-        y: u16,
-        width: u16,
-        height: u16,
-        tab_index: u32,
-    },
+    PaneOpened { pane_id: String, x: u16, y: u16, width: u16, height: u16, tab_index: u32 },
 
     /// A pane was closed
-    PaneClosed {
-        pane_id: String,
-    },
+    PaneClosed { pane_id: String },
 
     /// A pane was moved or resized
-    PaneResized {
-        pane_id: String,
-        x: u16,
-        y: u16,
-        width: u16,
-        height: u16,
-    },
+    PaneResized { pane_id: String, x: u16, y: u16, width: u16, height: u16 },
 
     /// Active tab changed
-    TabSwitched {
-        tab_index: u32,
-    },
+    TabSwitched { tab_index: u32 },
 
     /// Full layout snapshot (keyframe)
-    LayoutSnapshot {
-        panes: Vec<PaneGeometry>,
-    },
+    LayoutSnapshot { panes: Vec<PaneGeometry> },
 }
-
 
 /// Timestamped layout event (internal format for JSONL)
 #[derive(Debug, Serialize, Deserialize)]
@@ -117,11 +97,7 @@ impl LayoutJournal {
         let file = File::create(&output_path)?;
         let writer = BufWriter::new(file);
 
-        Ok(Self {
-            output_path,
-            writer,
-            start_time,
-        })
+        Ok(Self { output_path, writer, start_time })
     }
 
     /// Write a layout event with a timestamp.
@@ -131,19 +107,16 @@ impl LayoutJournal {
         let elapsed = self.start_time.elapsed();
         let timestamp = elapsed.as_secs_f64();
 
-        let timestamped = TimestampedEvent {
-            time: timestamp,
-            event,
-        };
+        let timestamped = TimestampedEvent { time: timestamp, event };
 
         let json = serde_json::to_string(&timestamped)?;
-        writeln!(self.writer, "{}", json)?;
+        writeln!(self.writer, "{json}")?;
         self.writer.flush()?;
 
         Ok(())
     }
 
-    /// Query current layout from tmux backend and write a LayoutSnapshot event.
+    /// Query current layout from tmux backend and write a `LayoutSnapshot` event.
     ///
     /// This should be called at recording start and periodically (e.g., every 5s)
     /// to create keyframes for seeking.
@@ -160,7 +133,7 @@ impl LayoutJournal {
     /// Uses: `tmux list-panes -s -t <session> -F '#{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{window_index}'`
     async fn query_tmux_layout(session_id: &str) -> Result<Vec<PaneGeometry>> {
         let output = Command::new("tmux")
-            .args(&[
+            .args([
                 "list-panes",
                 "-s",
                 "-t",
@@ -236,7 +209,7 @@ impl LayoutJournalReader {
 
         let events: Result<Vec<(f64, LayoutEvent)>> = reader
             .lines()
-            .filter_map(|line| line.ok())
+            .filter_map(std::result::Result::ok)
             .filter(|line| !line.trim().is_empty())
             .map(|line| {
                 let timestamped: TimestampedEvent = serde_json::from_str(&line)?;
@@ -299,10 +272,10 @@ impl LayoutJournalReader {
                             tab_index: *tab_index,
                         },
                     );
-                }
+                },
                 LayoutEvent::PaneClosed { pane_id } => {
                     layout.remove(pane_id);
-                }
+                },
                 LayoutEvent::PaneResized { pane_id, x, y, width, height } => {
                     if let Some(pane) = layout.get_mut(pane_id) {
                         pane.x = *x;
@@ -310,17 +283,17 @@ impl LayoutJournalReader {
                         pane.width = *width;
                         pane.height = *height;
                     }
-                }
+                },
                 LayoutEvent::LayoutSnapshot { panes } => {
                     // Replace entire state with snapshot
                     layout.clear();
                     for pane in panes {
                         layout.insert(pane.pane_id.clone(), pane.clone());
                     }
-                }
+                },
                 LayoutEvent::TabSwitched { .. } => {
                     // Tab switches don't affect geometry
-                }
+                },
             }
         }
 
@@ -362,9 +335,7 @@ mod tests {
                 height: 24,
                 tab_index: 0,
             },
-            LayoutEvent::PaneClosed {
-                pane_id: "%5".to_string(),
-            },
+            LayoutEvent::PaneClosed { pane_id: "%5".to_string() },
             LayoutEvent::PaneResized {
                 pane_id: "%6".to_string(),
                 x: 10,
@@ -518,9 +489,7 @@ mod tests {
             // t=3: close second pane
             std::thread::sleep(Duration::from_millis(50));
             journal
-                .write_event(LayoutEvent::PaneClosed {
-                    pane_id: "%2".to_string(),
-                })
+                .write_event(LayoutEvent::PaneClosed { pane_id: "%2".to_string() })
                 .unwrap();
 
             journal.close().unwrap();
@@ -613,9 +582,7 @@ mod tests {
 
             // Event after second snapshot
             journal
-                .write_event(LayoutEvent::PaneClosed {
-                    pane_id: "%4".to_string(),
-                })
+                .write_event(LayoutEvent::PaneClosed { pane_id: "%4".to_string() })
                 .unwrap();
 
             journal.close().unwrap();
@@ -654,9 +621,7 @@ mod tests {
         // Write empty snapshot
         {
             let mut journal = LayoutJournal::new(&output_dir, start_time).unwrap();
-            journal
-                .write_event(LayoutEvent::LayoutSnapshot { panes: vec![] })
-                .unwrap();
+            journal.write_event(LayoutEvent::LayoutSnapshot { panes: vec![] }).unwrap();
             journal.close().unwrap();
         }
 
@@ -709,9 +674,7 @@ mod tests {
                     }],
                 })
                 .unwrap();
-            journal
-                .write_event(LayoutEvent::TabSwitched { tab_index: 1 })
-                .unwrap();
+            journal.write_event(LayoutEvent::TabSwitched { tab_index: 1 }).unwrap();
             journal.close().unwrap();
         }
 
@@ -807,9 +770,7 @@ mod tests {
 
             // User closes second pane
             journal
-                .write_event(LayoutEvent::PaneClosed {
-                    pane_id: "%2".to_string(),
-                })
+                .write_event(LayoutEvent::PaneClosed { pane_id: "%2".to_string() })
                 .unwrap();
 
             // First pane expands back

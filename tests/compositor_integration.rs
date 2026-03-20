@@ -12,8 +12,7 @@ fn test_composite_writer_integration() {
 
     // Create layout.jsonl with two panes
     let layout_path = temp_dir.join("layout.jsonl");
-    let events = vec![
-        serde_json::json!({
+    let events = [serde_json::json!({
             "timestamp": 0.0,
             "event": "layout_snapshot",
             "panes": [{
@@ -34,8 +33,7 @@ fn test_composite_writer_integration() {
             "width": 40,
             "height": 20,
             "tab_index": 0
-        }),
-    ];
+        })];
 
     let content = events
         .iter()
@@ -120,26 +118,18 @@ fn test_composite_writer_integration() {
 
     let header = reader.header();
     assert_eq!(header.version, 2);
-    assert_eq!(
-        header.title,
-        Some("Integration Test Recording".to_string())
-    );
+    assert_eq!(header.title, Some("Integration Test Recording".to_string()));
     // Initial layout has only one pane (40x20), so that's the initial dimension
     assert_eq!(header.width, 40);
     assert_eq!(header.height, 20);
 
     // Verify events exist
-    let events: Vec<_> = reader
-        .events()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+    let events: Vec<_> = reader.events().collect::<Result<Vec<_>, _>>().unwrap();
     assert!(!events.is_empty());
 
     // Should have at least some output events
-    let output_events: Vec<_> = events
-        .iter()
-        .filter(|e| matches!(e, CastEvent::Output(_, _)))
-        .collect();
+    let output_events: Vec<_> =
+        events.iter().filter(|e| matches!(e, CastEvent::Output(_, _))).collect();
     assert!(!output_events.is_empty());
 
     // Cleanup
@@ -185,10 +175,8 @@ fn test_composite_writer_frame_rate_limiting() {
 
     // Write 100 events in 1 second (every 0.01s)
     for i in 0..100 {
-        let time = 0.01 * i as f64;
-        writer
-            .write_event(&CastEvent::Output(time, format!("Event {}\n", i)))
-            .unwrap();
+        let time = 0.01 * f64::from(i);
+        writer.write_event(&CastEvent::Output(time, format!("Event {i}\n"))).unwrap();
     }
     writer.finish().unwrap();
 
@@ -219,13 +207,8 @@ fn test_composite_writer_frame_rate_limiting() {
 
 #[test]
 fn test_composite_writer_border_styles() {
-    for style in [
-        BorderStyle::Single,
-        BorderStyle::Double,
-        BorderStyle::Heavy,
-        BorderStyle::None,
-    ] {
-        let temp_dir = std::env::temp_dir().join(format!("test_composite_border_{:?}", style));
+    for style in [BorderStyle::Single, BorderStyle::Double, BorderStyle::Heavy, BorderStyle::None] {
+        let temp_dir = std::env::temp_dir().join(format!("test_composite_border_{style:?}"));
         fs::create_dir_all(&temp_dir).unwrap();
 
         // Create layout with two panes
@@ -256,7 +239,7 @@ fn test_composite_writer_border_styles() {
 
         // Create minimal cast files
         for pane_id in [1, 2] {
-            let cast_path = temp_dir.join(format!("pane-{}.cast", pane_id));
+            let cast_path = temp_dir.join(format!("pane-{pane_id}.cast"));
             let mut writer = CastWriter::create(&cast_path).unwrap();
             writer
                 .write_header(&CastHeader {
@@ -271,7 +254,7 @@ fn test_composite_writer_border_styles() {
                 })
                 .unwrap();
             writer
-                .write_event(&CastEvent::Output(0.1, format!("Pane {}\n", pane_id)))
+                .write_event(&CastEvent::Output(0.1, format!("Pane {pane_id}\n")))
                 .unwrap();
             writer.finish().unwrap();
         }
@@ -282,7 +265,7 @@ fn test_composite_writer_border_styles() {
             fps: 10.0,
             idle_time_limit: Some(2.0),
             border_style: style,
-            title: Some(format!("Border test {:?}", style)),
+            title: Some(format!("Border test {style:?}")),
             theme: None,
         };
 

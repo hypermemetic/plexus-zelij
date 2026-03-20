@@ -17,11 +17,11 @@ pub enum Color {
 
 impl Color {
     /// Convert from vt100 color type.
-    pub fn from_vt100(color: vt100::Color) -> Self {
+    pub const fn from_vt100(color: vt100::Color) -> Self {
         match color {
-            vt100::Color::Default => Color::Default,
-            vt100::Color::Idx(idx) => Color::Indexed(idx),
-            vt100::Color::Rgb(r, g, b) => Color::Rgb(r, g, b),
+            vt100::Color::Default => Self::Default,
+            vt100::Color::Idx(idx) => Self::Indexed(idx),
+            vt100::Color::Rgb(r, g, b) => Self::Rgb(r, g, b),
         }
     }
 
@@ -30,21 +30,21 @@ impl Color {
     /// Returns the parameter string for SGR sequences (without the CSI prefix/suffix).
     pub fn to_ansi_fg(&self) -> String {
         match self {
-            Color::Default => "39".to_string(),
-            Color::Indexed(idx) if *idx < 8 => format!("{}", 30 + idx),
-            Color::Indexed(idx) if *idx < 16 => format!("{}", 82 + idx),
-            Color::Indexed(idx) => format!("38;5;{}", idx),
-            Color::Rgb(r, g, b) => format!("38;2;{};{};{}", r, g, b),
+            Self::Default => "39".to_string(),
+            Self::Indexed(idx) if *idx < 8 => format!("{}", 30 + idx),
+            Self::Indexed(idx) if *idx < 16 => format!("{}", 82 + idx),
+            Self::Indexed(idx) => format!("38;5;{idx}"),
+            Self::Rgb(r, g, b) => format!("38;2;{r};{g};{b}"),
         }
     }
 
     pub fn to_ansi_bg(&self) -> String {
         match self {
-            Color::Default => "49".to_string(),
-            Color::Indexed(idx) if *idx < 8 => format!("{}", 40 + idx),
-            Color::Indexed(idx) if *idx < 16 => format!("{}", 92 + idx),
-            Color::Indexed(idx) => format!("48;5;{}", idx),
-            Color::Rgb(r, g, b) => format!("48;2;{};{};{}", r, g, b),
+            Self::Default => "49".to_string(),
+            Self::Indexed(idx) if *idx < 8 => format!("{}", 40 + idx),
+            Self::Indexed(idx) if *idx < 16 => format!("{}", 92 + idx),
+            Self::Indexed(idx) => format!("48;5;{idx}"),
+            Self::Rgb(r, g, b) => format!("48;2;{r};{g};{b}"),
         }
     }
 }
@@ -91,10 +91,7 @@ impl Default for Cell {
 impl Cell {
     /// Create a new cell with default styling.
     pub fn new(ch: char) -> Self {
-        Self {
-            ch,
-            ..Default::default()
-        }
+        Self { ch, ..Default::default() }
     }
 
     /// Create a cell from vt100 cell data.
@@ -131,11 +128,7 @@ impl CompositeFrame {
     /// Create a new blank frame with the given dimensions.
     pub fn new(width: u16, height: u16) -> Self {
         let cells = vec![vec![Cell::default(); width as usize]; height as usize];
-        Self {
-            width,
-            height,
-            cells,
-        }
+        Self { width, height, cells }
     }
 
     /// Set a cell at the given position.
@@ -187,11 +180,10 @@ impl CompositeFrame {
                 let mut sgr_params = Vec::new();
 
                 // Check if we need to reset
-                let needs_reset =
-                    (!cell.bold && current_bold) ||
-                    (!cell.underline && current_underline) ||
-                    (!cell.inverse && current_inverse) ||
-                    (!cell.italic && current_italic);
+                let needs_reset = (!cell.bold && current_bold)
+                    || (!cell.underline && current_underline)
+                    || (!cell.inverse && current_inverse)
+                    || (!cell.italic && current_italic);
 
                 if needs_reset {
                     sgr_params.push("0".to_string());
@@ -303,7 +295,7 @@ mod tests {
         assert_eq!(frame.get_cell(5, 5).unwrap().ch, 'X');
 
         // Out of bounds
-        frame.set_cell(100, 100, cell.clone());
+        frame.set_cell(100, 100, cell);
         assert!(frame.get_cell(100, 100).is_none());
     }
 

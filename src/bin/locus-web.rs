@@ -8,21 +8,18 @@ use anyhow::Result;
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{Html, sse::{Event, Sse}},
+    response::{
+        sse::{Event, Sse},
+        Html,
+    },
     routing::get,
     Json, Router,
 };
 use futures::stream::{self, Stream};
-use serde::Serialize;
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
-use tokio::sync::RwLock;
 use plexus_locus::{backend::TerminalBackend, backends::tmux::TmuxBackend};
+use serde::Serialize;
+use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
+use tokio::sync::RwLock;
 
 /// Shared app state
 #[derive(Clone)]
@@ -34,8 +31,8 @@ struct AppState {
 
 #[derive(Clone)]
 struct CachedPane {
-    id: String,
-    name: Option<String>,
+    _id: String,
+    _name: Option<String>,
     content: String,
     width: u16,
     height: u16,
@@ -58,17 +55,42 @@ struct PaneContent {
     html: String,
 }
 
+#[derive(Serialize)]
+struct LayoutResponse {
+    sessions: Vec<SessionLayout>,
+}
+
+#[derive(Serialize)]
+struct SessionLayout {
+    name: String,
+    tabs: Vec<TabLayout>,
+}
+
+#[derive(Serialize)]
+struct TabLayout {
+    name: String,
+    index: u32,
+    panes: Vec<PaneLayout>,
+}
+
+#[derive(Serialize)]
+struct PaneLayout {
+    id: String,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     // Parse port from args
     let port: u16 = std::env::args()
         .nth(1)
-        .and_then(|arg| arg.strip_prefix("--port=").map(|s| s.to_string()))
+        .and_then(|arg| arg.strip_prefix("--port=").map(std::string::ToString::to_string))
         .or_else(|| std::env::args().nth(2))
         .and_then(|s| s.parse().ok())
         .unwrap_or(3000);
@@ -81,16 +103,14 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }
 
-    let state = AppState {
-        backend,
-        cache: Arc::new(RwLock::new(HashMap::new())),
-    };
+    let state = AppState { backend, cache: Arc::new(RwLock::new(HashMap::new())) };
 
     // Build router
     let app = Router::new()
         .route("/", get(index_handler))
         .route("/api/panes", get(list_panes_handler))
         .route("/api/pane/{id}", get(get_pane_handler))
+        .route("/api/layout", get(layout_handler))
         .route("/api/stream", get(sse_handler))
         .with_state(state);
 
@@ -124,18 +144,18 @@ async fn list_panes_handler(
                     PaneInfo {
                         id: p.id.0,
                         name: p.name,
-                        width: 80,  // TODO: get from backend
+                        width: 80, // TODO: get from backend
                         height: 24,
                         session: p.session.0,
                     }
                 })
                 .collect();
             Ok(Json(info))
-        }
+        },
         Err(e) => {
             tracing::error!("Failed to list panes: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        },
     }
 }
 
@@ -170,8 +190,8 @@ async fn get_pane_handler(
                 cache.insert(
                     pane_id.clone(),
                     CachedPane {
-                        id: pane_id.clone(),
-                        name: None,
+                        _id: pane_id.clone(),
+                        _name: None,
                         content: content.clone(),
                         width: 80,
                         height: 24,
@@ -181,17 +201,69 @@ async fn get_pane_handler(
             }
 
             let html = terminal_to_html(&content, 80, 24);
-            Ok(Json(PaneContent {
-                id: pane_id,
-                content,
-                html,
-            }))
-        }
+            Ok(Json(PaneContent { id: pane_id, content, html }))
+        },
         Err(e) => {
             tracing::error!("Failed to capture pane {}: {}", pane_id, e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        },
     }
+}
+
+/// Get tmux layout information (sessions, tabs, panes with positions)
+async fn layout_handler(
+    State(state): State<AppState>,
+) -> Result<Json<LayoutResponse>, StatusCode> {
+    // Get all sessions
+    let sessions = match state.backend.list_sessions().await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Failed to list sessions: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        },
+    };
+
+    let mut session_layouts = Vec::new();
+
+    for session in sessions {
+        // Get tabs for this session
+        let tabs = match state.backend.list_tabs(Some(&session.id.0)).await {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!("Failed to list tabs for session {}: {}", session.id.0, e);
+                continue;
+            },
+        };
+
+        let mut tab_layouts = Vec::new();
+
+        for tab in tabs {
+            // Get panes for this tab
+            let panes = match state.backend.list_panes(Some(&session.id.0), Some(&tab.id.0)).await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!("Failed to list panes for tab {}: {}", tab.id.0, e);
+                    continue;
+                },
+            };
+
+            let pane_layouts: Vec<PaneLayout> = panes
+                .into_iter()
+                .map(|p| PaneLayout { id: p.id.0, x: 0, y: 0, width: 80, height: 24 })
+                .collect();
+
+            tab_layouts.push(TabLayout {
+                name: tab.name.unwrap_or_else(|| format!("{}", tab.index)),
+                index: tab.index,
+                panes: pane_layouts,
+            });
+        }
+
+        session_layouts.push(SessionLayout { name: session.name, tabs: tab_layouts });
+    }
+
+    Ok(Json(LayoutResponse { sessions: session_layouts }))
 }
 
 /// SSE endpoint for streaming updates
@@ -208,7 +280,7 @@ async fn sse_handler(
                 tracing::error!("Failed to list panes: {}", e);
                 let event = Event::default().data("error");
                 return Some((Ok(event), state));
-            }
+            },
         };
 
         // Capture each pane

@@ -10,7 +10,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{RwLock, watch};
+use tokio::sync::{watch, RwLock};
 use vt100::Parser;
 
 /// Terminal state for a single pane
@@ -66,11 +66,7 @@ impl PaneTerminalState {
 
     /// Get specific region of terminal (rows start..end)
     pub fn region(&self, start_row: u16, end_row: u16) -> Vec<u8> {
-        self.parser
-            .screen()
-            .rows_formatted(start_row, end_row)
-            .flatten()
-            .collect()
+        self.parser.screen().rows_formatted(start_row, end_row).flatten().collect()
     }
 
     /// Get terminal dimensions
@@ -90,12 +86,12 @@ impl PaneTerminalState {
     }
 
     /// Get last update time
-    pub fn last_update(&self) -> Instant {
+    pub const fn last_update(&self) -> Instant {
         self.last_update
     }
 
     /// Get current sequence number
-    pub fn sequence(&self) -> u64 {
+    pub const fn sequence(&self) -> u64 {
         self.update_sequence
     }
 
@@ -134,9 +130,7 @@ pub struct TerminalStateManager {
 impl TerminalStateManager {
     /// Create new terminal state manager
     pub fn new() -> Self {
-        Self {
-            states: Arc::new(RwLock::new(HashMap::new())),
-        }
+        Self { states: Arc::new(RwLock::new(HashMap::new())) }
     }
 
     /// Start tracking a pane
@@ -320,10 +314,7 @@ mod tests {
         manager.track_pane("%1", 80, 24).await.unwrap();
 
         // Move cursor with ANSI escape
-        manager
-            .process_output("%1", b"\x1b[5;10H")
-            .await
-            .unwrap();
+        manager.process_output("%1", b"\x1b[5;10H").await.unwrap();
 
         let (row, col) = manager.get_cursor("%1").await.unwrap();
         assert_eq!(row, 4); // 0-indexed
@@ -336,10 +327,7 @@ mod tests {
         manager.track_pane("%2", 80, 24).await.unwrap();
 
         // Write some content
-        manager
-            .process_output("%2", b"Test content")
-            .await
-            .unwrap();
+        manager.process_output("%2", b"Test content").await.unwrap();
 
         // Resize
         manager.resize_pane("%2", 120, 30).await.unwrap();

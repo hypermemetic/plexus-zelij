@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::backend::TerminalBackend;
 use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
-use crate::types::*;
+use crate::types::{LocusEvent, Pane, TabOpts, PaneOpts, Direction, PaneId, SessionId};
 
 const CONFIG_FILENAME: &str = "plexus_locus.config.json";
 
@@ -44,7 +44,7 @@ pub struct PaneConfig {
     pub cwd: Option<String>,
 }
 
-fn default_layout() -> [u32; 2] {
+const fn default_layout() -> [u32; 2] {
     [1, 1]
 }
 
@@ -92,10 +92,7 @@ impl WorkspaceActivation {
         description = "Show the config file contents",
         params(path = "Project directory containing plexus_locus.config.json (default: CWD)")
     )]
-    async fn show(
-        &self,
-        path: Option<String>,
-    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+    async fn show(&self, path: Option<String>) -> impl Stream<Item = LocusEvent> + Send + 'static {
         stream! {
             let dir = PathBuf::from(path.unwrap_or_else(|| ".".into()));
             let config_path = dir.join(CONFIG_FILENAME);
@@ -157,7 +154,7 @@ impl WorkspaceActivation {
                 Ok(c) => c,
                 Err(e) => {
                     yield LocusEvent::Error {
-                        message: format!("Invalid config: {}", e),
+                        message: format!("Invalid config: {e}"),
                     };
                     return;
                 }
@@ -167,15 +164,12 @@ impl WorkspaceActivation {
             let ws_name = workspace.unwrap_or_else(|| {
                 config.workspaces.keys().next().cloned().unwrap_or_default()
             });
-            let ws = match config.workspaces.get(&ws_name) {
-                Some(w) => w,
-                None => {
-                    let available: Vec<&String> = config.workspaces.keys().collect();
-                    yield LocusEvent::Error {
-                        message: format!("Workspace '{}' not found. Available: {:?}", ws_name, available),
-                    };
-                    return;
-                }
+            let ws = if let Some(w) = config.workspaces.get(&ws_name) { w } else {
+                let available: Vec<&String> = config.workspaces.keys().collect();
+                yield LocusEvent::Error {
+                    message: format!("Workspace '{ws_name}' not found. Available: {available:?}"),
+                };
+                return;
             };
 
             // Track all created panes for the state file
@@ -213,14 +207,11 @@ impl WorkspaceActivation {
                         .map(|p| p.id.0.clone()),
                     Err(_) => None,
                 };
-                let initial_pane = match initial_pane {
-                    Some(p) => p,
-                    None => {
-                        yield LocusEvent::Error {
-                            message: format!("Could not find initial pane in tab '{}'", tab_config.name),
-                        };
-                        continue;
-                    }
+                let initial_pane = if let Some(p) = initial_pane { p } else {
+                    yield LocusEvent::Error {
+                        message: format!("Could not find initial pane in tab '{}'", tab_config.name),
+                    };
+                    continue;
                 };
 
                 // Build grid: rows by splitting down, then cols by splitting right
@@ -235,7 +226,7 @@ impl WorkspaceActivation {
                     match backend.create_pane(&opts).await {
                         Ok(p) => left_column.push(p.id.0.clone()),
                         Err(e) => {
-                            yield LocusEvent::Error { message: format!("Grid error: {}", e) };
+                            yield LocusEvent::Error { message: format!("Grid error: {e}") };
                             break;
                         }
                     }
@@ -254,7 +245,7 @@ impl WorkspaceActivation {
                         match backend.create_pane(&opts).await {
                             Ok(p) => row.push(p.id.0.clone()),
                             Err(e) => {
-                                yield LocusEvent::Error { message: format!("Grid error: {}", e) };
+                                yield LocusEvent::Error { message: format!("Grid error: {e}") };
                                 break;
                             }
                         }
@@ -308,7 +299,7 @@ impl WorkspaceActivation {
                 "config_path": config_path.display().to_string(),
                 "tabs": all_created_tabs,
             });
-            let state_path = format!("{}/{}.json", state_dir, ws_name);
+            let state_path = format!("{state_dir}/{ws_name}.json");
             let _ = tokio::fs::write(&state_path, serde_json::to_string_pretty(&state).unwrap_or_default()).await;
 
             yield LocusEvent::Ok {
@@ -343,39 +334,30 @@ impl WorkspaceActivation {
                 // Try to read config to get default workspace name
                 let dir = PathBuf::from(path.unwrap_or_else(|| ".".into()));
                 let config_path = dir.join(CONFIG_FILENAME);
-                match tokio::fs::read_to_string(&config_path).await {
-                    Ok(content) => {
-                        match serde_json::from_str::<LocusConfig>(&content) {
-                            Ok(config) => config.workspaces.keys().next().cloned().unwrap_or_default(),
-                            Err(_) => {
-                                yield LocusEvent::Error { message: "No workspace specified and config is invalid".into() };
-                                return;
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        yield LocusEvent::Error { message: "No workspace specified and no config found".into() };
+                if let Ok(content) = tokio::fs::read_to_string(&config_path).await {
+                    if let Ok(config) = serde_json::from_str::<LocusConfig>(&content) { config.workspaces.keys().next().cloned().unwrap_or_default() } else {
+                        yield LocusEvent::Error { message: "No workspace specified and config is invalid".into() };
                         return;
                     }
+                } else {
+                    yield LocusEvent::Error { message: "No workspace specified and no config found".into() };
+                    return;
                 }
             };
 
             // Read state file
-            let state_path = format!("/tmp/plexus_locus_workspaces/{}.json", ws_name);
-            let state_content = match tokio::fs::read_to_string(&state_path).await {
-                Ok(c) => c,
-                Err(_) => {
-                    yield LocusEvent::Error {
-                        message: format!("No running workspace '{}' (no state file)", ws_name),
-                    };
-                    return;
-                }
+            let state_path = format!("/tmp/plexus_locus_workspaces/{ws_name}.json");
+            let state_content = if let Ok(c) = tokio::fs::read_to_string(&state_path).await { c } else {
+                yield LocusEvent::Error {
+                    message: format!("No running workspace '{ws_name}' (no state file)"),
+                };
+                return;
             };
 
             let state: serde_json::Value = match serde_json::from_str(&state_content) {
                 Ok(v) => v,
                 Err(e) => {
-                    yield LocusEvent::Error { message: format!("Corrupt state file: {}", e) };
+                    yield LocusEvent::Error { message: format!("Corrupt state file: {e}") };
                     return;
                 }
             };
@@ -404,7 +386,7 @@ impl WorkspaceActivation {
             let _ = tokio::fs::remove_file(&state_path).await;
 
             yield LocusEvent::Ok {
-                message: format!("Workspace '{}' down: killed {} tab(s)", ws_name, killed),
+                message: format!("Workspace '{ws_name}' down: killed {killed} tab(s)"),
             };
         }
     }
@@ -412,11 +394,15 @@ impl WorkspaceActivation {
 
 #[async_trait]
 impl ChildRouter for WorkspaceActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "workspace"
     }
 
-    async fn router_call(&self, method: &str, params: serde_json::Value) -> Result<PlexusStream, PlexusError> {
+    async fn router_call(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<PlexusStream, PlexusError> {
         Activation::call(self, method, params).await
     }
 

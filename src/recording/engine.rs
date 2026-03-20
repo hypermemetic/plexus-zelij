@@ -3,7 +3,7 @@
 //! Uses tmux `pipe-pane` to capture raw terminal output from panes, timestamps the bytes
 //! using a FIFO (named pipe) approach, and writes per-pane `.cast` files.
 //!
-//! Also feeds data to the TerminalStateManager for in-memory terminal state tracking.
+//! Also feeds data to the `TerminalStateManager` for in-memory terminal state tracking.
 
 use crate::cast::{CastError, CastEvent, CastHeader, CastWriter};
 use crate::observation::TerminalStateManager;
@@ -99,38 +99,33 @@ impl PaneRecorder {
 
         // Setup paths
         let pane_id_clean = pane_id.trim_start_matches('%');
-        let fifo_path = output_dir.join(format!("pane-{}.fifo", pane_id_clean));
-        let cast_path = output_dir.join(format!("pane-{}.cast", pane_id_clean));
+        let fifo_path = output_dir.join(format!("pane-{pane_id_clean}.fifo"));
+        let cast_path = output_dir.join(format!("pane-{pane_id_clean}.cast"));
 
         // Remove existing FIFO if present
         let _ = fs::remove_file(&fifo_path).await;
 
         // Create FIFO (named pipe)
-        let fifo_path_str = fifo_path.to_str()
-            .ok_or_else(|| RecordingError::Io(std::io::Error::new(
+        let fifo_path_str = fifo_path.to_str().ok_or_else(|| {
+            RecordingError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Invalid FIFO path"
-            )))?;
+                "Invalid FIFO path",
+            ))
+        })?;
 
         debug!("Creating FIFO at {}", fifo_path_str);
-        let mkfifo_status = Command::new("mkfifo")
-            .arg(fifo_path_str)
-            .status()
-            .await?;
+        let mkfifo_status = Command::new("mkfifo").arg(fifo_path_str).status().await?;
 
         if !mkfifo_status.success() {
-            return Err(RecordingError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("mkfifo failed for {}", fifo_path_str)
+            return Err(RecordingError::Io(std::io::Error::other(
+                format!("mkfifo failed for {fifo_path_str}"),
             )));
         }
 
         // Record start time
         let start_time = Instant::now();
-        let start_timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let start_timestamp =
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
 
         // Start pipe-pane (this will block until something reads from the FIFO)
         let pane_id_clone = pane_id.clone();
@@ -138,7 +133,7 @@ impl PaneRecorder {
         tokio::spawn(async move {
             debug!("Starting pipe-pane for {}", pane_id_clone);
             let result = Command::new("tmux")
-                .args(&[
+                .args([
                     "pipe-pane",
                     "-t",
                     &pane_id_clone,
@@ -150,13 +145,13 @@ impl PaneRecorder {
             match result {
                 Ok(status) if status.success() => {
                     debug!("pipe-pane started for {}", pane_id_clone);
-                }
+                },
                 Ok(status) => {
                     error!("pipe-pane failed for {}: exit code {:?}", pane_id_clone, status.code());
-                }
+                },
                 Err(e) => {
                     error!("pipe-pane command error for {}: {}", pane_id_clone, e);
-                }
+                },
             }
         });
 
@@ -170,7 +165,7 @@ impl PaneRecorder {
             height,
             timestamp: Some(start_timestamp),
             env: None,
-            title: Some(format!("Pane {}", pane_id)),
+            title: Some(format!("Pane {pane_id}")),
             idle_time_limit: None,
             theme: None,
         };
@@ -181,11 +176,11 @@ impl PaneRecorder {
 
         // Track in terminal state manager if provided
         if let Some(ref state_mgr) = terminal_state {
-            state_mgr.track_pane(&pane_id, width, height).await
-                .map_err(|e| RecordingError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to track pane in state manager: {}", e)
-                )))?;
+            state_mgr.track_pane(&pane_id, width, height).await.map_err(|e| {
+                RecordingError::Io(std::io::Error::other(
+                    format!("Failed to track pane in state manager: {e}"),
+                ))
+            })?;
             debug!("Tracking pane {} in terminal state manager", pane_id);
         }
 
@@ -206,9 +201,7 @@ impl PaneRecorder {
 
             // Open cast file for appending events
             use std::io::Write as StdWrite;
-            let cast_file = std::fs::OpenOptions::new()
-                .append(true)
-                .open(&cast_path_for_task)?;
+            let cast_file = std::fs::OpenOptions::new().append(true).open(&cast_path_for_task)?;
             let mut file_writer = std::io::BufWriter::new(cast_file);
 
             let mut buffer = vec![0u8; 8192];
@@ -246,7 +239,7 @@ impl PaneRecorder {
 
                                 let event = CastEvent::Output(timestamp, data);
                                 let json = serde_json::to_string(&event)?;
-                                writeln!(file_writer, "{}", json)?;
+                                writeln!(file_writer, "{json}")?;
                                 file_writer.flush()?;
                             }
                             Err(e) => {
@@ -280,21 +273,18 @@ impl PaneRecorder {
         debug!("Stopping recording for {}", self.pane_id);
 
         // Close pipe-pane (no command = close existing pipe)
-        let result = Command::new("tmux")
-            .args(&["pipe-pane", "-t", &self.pane_id])
-            .status()
-            .await;
+        let result = Command::new("tmux").args(["pipe-pane", "-t", &self.pane_id]).status().await;
 
         match result {
             Ok(status) if status.success() => {
                 debug!("pipe-pane stopped for {}", self.pane_id);
-            }
+            },
             Ok(status) => {
                 warn!("pipe-pane stop failed for {}: exit code {:?}", self.pane_id, status.code());
-            }
+            },
             Err(e) => {
                 warn!("pipe-pane stop command error for {}: {}", self.pane_id, e);
-            }
+            },
         }
 
         // Signal reader task to stop
@@ -307,18 +297,17 @@ impl PaneRecorder {
             match task.await {
                 Ok(Ok(())) => {
                     debug!("Reader task finished successfully for {}", self.pane_id);
-                }
+                },
                 Ok(Err(e)) => {
                     error!("Reader task error for {}: {}", self.pane_id, e);
                     return Err(e);
-                }
+                },
                 Err(e) => {
                     error!("Reader task panicked for {}: {}", self.pane_id, e);
-                    return Err(RecordingError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Reader task panicked: {}", e)
+                    return Err(RecordingError::Io(std::io::Error::other(
+                        format!("Reader task panicked: {e}"),
                     )));
-                }
+                },
             }
         }
 
@@ -332,12 +321,12 @@ impl PaneRecorder {
     /// Check if a pane already has an active pipe.
     async fn check_existing_pipe(pane_id: &str) -> Result<bool> {
         let output = Command::new("tmux")
-            .args(&[
+            .args([
                 "list-panes",
                 "-t",
                 pane_id,
                 "-F",
-                "#{pane_id} #{pane_pipe}",  // Use space as separator, not \t
+                "#{pane_id} #{pane_pipe}", // Use space as separator, not \t
             ])
             .output()
             .await?;
@@ -349,7 +338,7 @@ impl PaneRecorder {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         for line in stdout.lines() {
-            let fields: Vec<&str> = line.split_whitespace().collect();  // Use split_whitespace instead of split('\t')
+            let fields: Vec<&str> = line.split_whitespace().collect(); // Use split_whitespace instead of split('\t')
             if fields.len() >= 2 && fields[0] == pane_id {
                 // #{pane_pipe} is 1 if pipe is active, 0 otherwise
                 return Ok(fields[1] == "1");
@@ -413,26 +402,21 @@ impl RecordingSession {
                 Ok(recorder) => {
                     debug!("Started recording for pane {}", pane_id);
                     recorders.insert(pane_id, recorder);
-                }
+                },
                 Err(RecordingError::PaneHasPipe(id)) => {
                     warn!("Pane {} already has pipe, skipping", id);
-                }
+                },
                 Err(e) => {
                     error!("Failed to start recording for pane {}: {}", pane_id, e);
                     // Continue with other panes
-                }
+                },
             }
         }
 
         // Write layout snapshot
         Self::write_layout_snapshot(&session_id, &output_dir).await?;
 
-        Ok(Self {
-            session_id,
-            output_dir,
-            recorders,
-            terminal_state,
-        })
+        Ok(Self { session_id, output_dir, recorders, terminal_state })
     }
 
     /// Stop recording all panes.
@@ -448,10 +432,10 @@ impl RecordingSession {
                 Ok(path) => {
                     debug!("Stopped recording for {}", pane_id);
                     cast_files.push(path);
-                }
+                },
                 Err(e) => {
                     error!("Failed to stop recording for {}: {}", pane_id, e);
-                }
+                },
             }
         }
 
@@ -497,7 +481,9 @@ impl RecordingSession {
     pub async fn remove_pane(&mut self, pane_id: impl Into<String>) -> Result<PathBuf> {
         let pane_id = pane_id.into();
 
-        let recorder = self.recorders.remove(&pane_id)
+        let recorder = self
+            .recorders
+            .remove(&pane_id)
             .ok_or_else(|| RecordingError::NotRecording(pane_id.clone()))?;
 
         let path = recorder.stop().await?;
@@ -525,13 +511,13 @@ impl RecordingSession {
     /// List all panes in a session with their dimensions.
     async fn list_panes(session_id: &str) -> Result<Vec<(String, u16, u16)>> {
         let output = Command::new("tmux")
-            .args(&[
+            .args([
                 "list-panes",
                 "-s",
                 "-t",
                 session_id,
                 "-F",
-                "#{pane_id} #{pane_width} #{pane_height}",  // Use space separator
+                "#{pane_id} #{pane_width} #{pane_height}", // Use space separator
             ])
             .output()
             .await?;
@@ -545,7 +531,7 @@ impl RecordingSession {
         let mut panes = Vec::new();
 
         for line in stdout.lines() {
-            let fields: Vec<&str> = line.split_whitespace().collect();  // Use split_whitespace
+            let fields: Vec<&str> = line.split_whitespace().collect(); // Use split_whitespace
             if fields.len() >= 3 {
                 let pane_id = fields[0].to_string();
                 let width: u16 = fields[1].parse().unwrap_or(80);
@@ -560,12 +546,12 @@ impl RecordingSession {
     /// Get info for a single pane.
     async fn get_pane_info(pane_id: &str) -> Result<(String, u16, u16)> {
         let output = Command::new("tmux")
-            .args(&[
+            .args([
                 "list-panes",
                 "-t",
                 pane_id,
                 "-F",
-                "#{pane_id} #{pane_width} #{pane_height}",  // Use space separator
+                "#{pane_id} #{pane_width} #{pane_height}", // Use space separator
             ])
             .output()
             .await?;
@@ -576,10 +562,12 @@ impl RecordingSession {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let line = stdout.lines().next()
+        let line = stdout
+            .lines()
+            .next()
             .ok_or_else(|| RecordingError::PaneNotFound(pane_id.to_string()))?;
 
-        let fields: Vec<&str> = line.split_whitespace().collect();  // Use split_whitespace
+        let fields: Vec<&str> = line.split_whitespace().collect(); // Use split_whitespace
         if fields.len() >= 3 {
             let pane_id = fields[0].to_string();
             let width: u16 = fields[1].parse().unwrap_or(80);
@@ -596,7 +584,7 @@ impl RecordingSession {
 
         // Get current layout from tmux
         let output = Command::new("tmux")
-            .args(&[
+            .args([
                 "list-panes",
                 "-s",
                 "-t",
@@ -613,10 +601,7 @@ impl RecordingSession {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs_f64();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
 
         // Parse panes and create layout event
         let mut panes = Vec::new();

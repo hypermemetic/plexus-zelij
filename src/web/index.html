@@ -34,6 +34,43 @@
             color: #4ec9b0;
         }
 
+        #header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        #view-switcher {
+            display: flex;
+            gap: 8px;
+            background: #1a1a1a;
+            padding: 4px;
+            border-radius: 6px;
+        }
+
+        .view-btn {
+            padding: 6px 12px;
+            background: transparent;
+            color: #888;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .view-btn:hover {
+            color: #d4d4d4;
+            background: #2d2d2d;
+        }
+
+        .view-btn.active {
+            background: #4ec9b0;
+            color: #000;
+            font-weight: 600;
+        }
+
         #status {
             display: flex;
             align-items: center;
@@ -55,20 +92,29 @@
             50% { opacity: 0.3; }
         }
 
-        #panes-container {
+        .view-container {
+            display: none;
+            height: calc(100vh - 50px);
+        }
+
+        .view-container.active {
+            display: block;
+        }
+
+        /* Grid View Styles */
+        #grid-panes-container {
             display: grid;
             gap: 8px;
             padding: 8px;
-            height: calc(100vh - 50px);
+            height: 100%;
             overflow: auto;
         }
 
-        /* Auto-layout grid based on pane count */
-        #panes-container.count-1 { grid-template-columns: 1fr; }
-        #panes-container.count-2 { grid-template-columns: 1fr 1fr; }
-        #panes-container.count-3 { grid-template-columns: repeat(2, 1fr); }
-        #panes-container.count-4 { grid-template-columns: repeat(2, 1fr); }
-        #panes-container[class*="count-"] { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+        #grid-panes-container.count-1 { grid-template-columns: 1fr; }
+        #grid-panes-container.count-2 { grid-template-columns: 1fr 1fr; }
+        #grid-panes-container.count-3 { grid-template-columns: repeat(2, 1fr); }
+        #grid-panes-container.count-4 { grid-template-columns: repeat(2, 1fr); }
+        #grid-panes-container[class*="count-"] { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
 
         .pane {
             background: #000;
@@ -106,6 +152,78 @@
             overflow: auto;
             font-size: 13px;
             line-height: 1.4;
+            white-space: pre;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+        }
+
+        /* Tmux Layout View Styles */
+        #tmux-layout-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: #1a1a1a;
+        }
+
+        #tmux-tabs {
+            display: flex;
+            background: #2d2d2d;
+            border-bottom: 1px solid #3d3d3d;
+            overflow-x: auto;
+        }
+
+        .tmux-tab {
+            padding: 8px 16px;
+            background: #1a1a1a;
+            color: #888;
+            border-right: 1px solid #3d3d3d;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .tmux-tab:hover {
+            background: #252525;
+        }
+
+        .tmux-tab.active {
+            background: #4ec9b0;
+            color: #000;
+            font-weight: 600;
+        }
+
+        #tmux-panes {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tmux-pane {
+            position: absolute;
+            background: #000;
+            border: 1px solid #4ec9b0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tmux-pane-title {
+            background: #2d2d2d;
+            color: #4ec9b0;
+            padding: 4px 8px;
+            font-size: 10px;
+            border-bottom: 1px solid #4ec9b0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tmux-pane-content {
+            flex: 1;
+            padding: 4px 8px;
+            overflow: auto;
+            font-size: 12px;
+            line-height: 1.3;
             white-space: pre;
             font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
         }
@@ -153,22 +271,68 @@
 <body>
     <div id="header">
         <h1>🖥️ Locus Terminal Viewer</h1>
-        <div id="status">
-            <div class="status-indicator"></div>
-            <span id="status-text">Connected</span>
-            <span id="pane-count">0 panes</span>
+        <div id="header-right">
+            <div id="view-switcher">
+                <button class="view-btn active" data-view="grid">Grid View</button>
+                <button class="view-btn" data-view="tmux">Tmux Layout</button>
+            </div>
+            <div id="status">
+                <div class="status-indicator"></div>
+                <span id="status-text">Connected</span>
+                <span id="pane-count">0 panes</span>
+            </div>
         </div>
     </div>
 
-    <div id="panes-container" class="count-0">
-        <div class="loading">Loading panes...</div>
+    <!-- Grid View -->
+    <div id="grid-view" class="view-container active">
+        <div id="grid-panes-container" class="count-0">
+            <div class="loading">Loading panes...</div>
+        </div>
+    </div>
+
+    <!-- Tmux Layout View -->
+    <div id="tmux-view" class="view-container">
+        <div id="tmux-layout-container">
+            <div id="tmux-tabs"></div>
+            <div id="tmux-panes">
+                <div class="loading">Loading layout...</div>
+            </div>
+        </div>
     </div>
 
     <script>
         const API_BASE = '';
         let updateInterval = null;
         let currentPanes = new Set();
+        let currentView = 'grid';
+        let currentSession = null;
+        let currentTab = null;
 
+        // View switcher
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const view = btn.dataset.view;
+                switchView(view);
+            });
+        });
+
+        function switchView(view) {
+            currentView = view;
+
+            // Update buttons
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === view);
+            });
+
+            // Update containers
+            document.querySelectorAll('.view-container').forEach(container => {
+                container.classList.remove('active');
+            });
+            document.getElementById(`${view}-view`).classList.add('active');
+        }
+
+        // API functions
         async function fetchPanes() {
             try {
                 const response = await fetch(`${API_BASE}/api/panes`);
@@ -192,6 +356,18 @@
             }
         }
 
+        async function fetchLayout() {
+            try {
+                const response = await fetch(`${API_BASE}/api/layout`);
+                if (!response.ok) throw new Error('Failed to fetch layout');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching layout:', error);
+                return null;
+            }
+        }
+
+        // Grid View Functions
         function createPaneElement(pane) {
             const div = document.createElement('div');
             div.className = 'pane';
@@ -214,7 +390,7 @@
             return div;
         }
 
-        async function updatePaneContent(paneId) {
+        async function updatePaneContent(paneId, autoScroll = true) {
             const paneDiv = document.getElementById(`pane-${paneId}`);
             if (!paneDiv) return;
 
@@ -222,25 +398,27 @@
             if (!content) return;
 
             const contentDiv = paneDiv.querySelector('.pane-content');
+            const wasAtBottom = contentDiv.scrollHeight - contentDiv.scrollTop - contentDiv.clientHeight < 50;
+
             contentDiv.textContent = content.content;
 
-            // Auto-scroll to bottom if near bottom already
-            if (contentDiv.scrollHeight - contentDiv.scrollTop - contentDiv.clientHeight < 100) {
+            // Auto-scroll to bottom if enabled and was already at bottom or first load
+            if (autoScroll && (wasAtBottom || contentDiv.scrollTop === 0)) {
                 contentDiv.scrollTop = contentDiv.scrollHeight;
             }
         }
 
-        async function refreshPanes() {
+        async function refreshGridView() {
             const panes = await fetchPanes();
 
             if (panes.length === 0) {
-                document.getElementById('panes-container').innerHTML =
+                document.getElementById('grid-panes-container').innerHTML =
                     '<div class="error">No panes found. Make sure tmux is running with active panes.</div>';
                 document.getElementById('pane-count').textContent = '0 panes';
                 return;
             }
 
-            const container = document.getElementById('panes-container');
+            const container = document.getElementById('grid-panes-container');
             const newPaneIds = new Set(panes.map(p => p.id));
 
             // Update grid class based on count
@@ -273,12 +451,128 @@
             document.getElementById('status-text').textContent = 'Connected';
         }
 
+        // Tmux Layout View Functions
+        async function refreshTmuxView() {
+            const layout = await fetchLayout();
+            if (!layout) return;
+
+            // Extract sessions, tabs, and panes from layout
+            // For now, we'll parse the panes list and group by session/tab
+            const panes = await fetchPanes();
+            if (panes.length === 0) return;
+
+            // Group panes by session
+            const sessions = {};
+            for (const pane of panes) {
+                if (!sessions[pane.session]) {
+                    sessions[pane.session] = {};
+                }
+                // For now, put all panes in a single tab per session
+                const tabKey = 'default';
+                if (!sessions[pane.session][tabKey]) {
+                    sessions[pane.session][tabKey] = [];
+                }
+                sessions[pane.session][tabKey].push(pane);
+            }
+
+            // Use first session if not set
+            if (!currentSession && Object.keys(sessions).length > 0) {
+                currentSession = Object.keys(sessions)[0];
+                currentTab = 'default';
+            }
+
+            // Render tabs
+            renderTabs(sessions);
+
+            // Render panes for current tab
+            if (currentSession && currentTab && sessions[currentSession] && sessions[currentSession][currentTab]) {
+                await renderTmuxPanes(sessions[currentSession][currentTab]);
+            }
+        }
+
+        function renderTabs(sessions) {
+            const tabsContainer = document.getElementById('tmux-tabs');
+            tabsContainer.innerHTML = '';
+
+            for (const [sessionName, tabs] of Object.entries(sessions)) {
+                for (const [tabName, panes] of Object.entries(tabs)) {
+                    const tab = document.createElement('div');
+                    tab.className = 'tmux-tab';
+                    if (sessionName === currentSession && tabName === currentTab) {
+                        tab.classList.add('active');
+                    }
+                    tab.textContent = `${sessionName}:${tabName} (${panes.length})`;
+                    tab.addEventListener('click', () => {
+                        currentSession = sessionName;
+                        currentTab = tabName;
+                        refreshTmuxView();
+                    });
+                    tabsContainer.appendChild(tab);
+                }
+            }
+        }
+
+        async function renderTmuxPanes(panes) {
+            const container = document.getElementById('tmux-panes');
+            container.innerHTML = '';
+
+            // Calculate layout (simple grid for now)
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            const cols = Math.ceil(Math.sqrt(panes.length));
+            const rows = Math.ceil(panes.length / cols);
+            const paneWidth = containerWidth / cols;
+            const paneHeight = containerHeight / rows;
+
+            for (let i = 0; i < panes.length; i++) {
+                const pane = panes[i];
+                const row = Math.floor(i / cols);
+                const col = i % cols;
+
+                const paneDiv = document.createElement('div');
+                paneDiv.className = 'tmux-pane';
+                paneDiv.style.left = `${col * paneWidth}px`;
+                paneDiv.style.top = `${row * paneHeight}px`;
+                paneDiv.style.width = `${paneWidth}px`;
+                paneDiv.style.height = `${paneHeight}px`;
+
+                const title = document.createElement('div');
+                title.className = 'tmux-pane-title';
+                title.textContent = `${pane.id} ${pane.name || ''}`;
+
+                const content = document.createElement('div');
+                content.className = 'tmux-pane-content';
+                content.id = `tmux-pane-content-${pane.id}`;
+
+                paneDiv.appendChild(title);
+                paneDiv.appendChild(content);
+                container.appendChild(paneDiv);
+
+                // Fetch and render content
+                const paneContent = await fetchPaneContent(pane.id);
+                if (paneContent) {
+                    content.textContent = paneContent.content;
+                    // Auto-scroll to bottom
+                    content.scrollTop = content.scrollHeight;
+                }
+            }
+        }
+
+        // Main refresh function
+        async function refresh() {
+            if (currentView === 'grid') {
+                await refreshGridView();
+            } else if (currentView === 'tmux') {
+                await refreshTmuxView();
+            }
+        }
+
         // Initialize
         async function init() {
-            await refreshPanes();
+            await refresh();
 
             // Refresh every 500ms
-            updateInterval = setInterval(refreshPanes, 500);
+            updateInterval = setInterval(refresh, 500);
         }
 
         // Start when page loads

@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
-use plexus_locus::{Locus, TmuxBackend, Zellij};
-use plexus_locus::compositor::{BorderStyle, CompositeOpts, CompositeWriter};
 use plexus_core::plexus::DynamicHub;
+use plexus_locus::compositor::{BorderStyle, CompositeOpts, CompositeWriter};
+use plexus_locus::{Locus, TmuxBackend, Zellij};
 use plexus_transport::TransportServer;
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(name = "locus")]
@@ -79,24 +79,24 @@ async fn main() -> anyhow::Result<()> {
 
     // Handle standalone render command
     match args.command {
-        Some(Command::Render {
-            recording_dir,
-            output,
-            fps,
-            idle_limit,
-            border,
-            preview,
-            time,
-        }) => {
-            return run_standalone_render(recording_dir, output, fps, idle_limit, border, preview, time);
-        }
+        Some(Command::Render { recording_dir, output, fps, idle_limit, border, preview, time }) => {
+            return run_standalone_render(
+                recording_dir,
+                output,
+                fps,
+                idle_limit,
+                border,
+                preview,
+                time,
+            );
+        },
         Some(Command::Serve { stdio, port, backend }) => {
             return run_server(stdio, port, backend).await;
-        }
+        },
         None => {
             // Default to server mode with args from top level
             return run_server(args.stdio, args.port, args.backend).await;
-        }
+        },
     }
 }
 
@@ -118,7 +118,7 @@ fn run_standalone_render(
         // Preview mode - render single frame
         use plexus_locus::compositor::Compositor;
 
-        eprintln!("Rendering preview at t={:.2}s...", time);
+        eprintln!("Rendering preview at t={time:.2}s...");
 
         let mut compositor = Compositor::new(&recording_dir)?;
         compositor.build_timeline()?;
@@ -127,7 +127,7 @@ fn run_standalone_render(
         let content = frame.render_ansi();
 
         // Print preview to stdout
-        println!("{}", content);
+        println!("{content}");
 
         eprintln!("\nPreview rendered: {}x{} at t={:.2}s", frame.width, frame.height, time);
     } else {
@@ -136,7 +136,7 @@ fn run_standalone_render(
 
         eprintln!("Rendering recording: {}", recording_dir.display());
         eprintln!("Output: {}", output_path.display());
-        eprintln!("Options: fps={}, idle_limit={}s, border={}", fps, idle_limit, border);
+        eprintln!("Options: fps={fps}, idle_limit={idle_limit}s, border={border}");
 
         let border_style = match border.to_lowercase().as_str() {
             "double" => BorderStyle::Double,
@@ -153,8 +153,8 @@ fn run_standalone_render(
             theme: None,
         };
 
-        let writer = CompositeWriter::new(&recording_dir, &output_path, opts)
-            .with_progress(|progress| {
+        let writer =
+            CompositeWriter::new(&recording_dir, &output_path, opts).with_progress(|progress| {
                 eprint!("\rProgress: {:.1}%", progress * 100.0);
                 if progress >= 1.0 {
                     eprintln!(); // New line on completion
@@ -192,11 +192,11 @@ async fn run_server(stdio: bool, port: u16, backend: String) -> anyhow::Result<(
         "tmux" => {
             tracing::info!("Using tmux backend");
             Locus::new(TmuxBackend::new())
-        }
+        },
         "zellij" => {
             tracing::info!("Using zellij backend");
             Locus::new(Zellij::new())
-        }
+        },
         _ => {
             // Auto-detect: $TMUX → tmux, $ZELLIJ_SESSION_NAME → zellij, else tmux
             if std::env::var("TMUX").is_ok() {
@@ -209,7 +209,7 @@ async fn run_server(stdio: bool, port: u16, backend: String) -> anyhow::Result<(
                 tracing::info!("No multiplexer detected, defaulting to tmux backend");
                 Locus::new(TmuxBackend::new())
             }
-        }
+        },
     };
 
     // Register sub-activations flat on the DynamicHub for clean routing:
@@ -226,13 +226,11 @@ async fn run_server(stdio: bool, port: u16, backend: String) -> anyhow::Result<(
             .register(locus.workspace)
             .register(locus.info)
             .register(locus.recording)
-            .register(locus.render)
+            .register(locus.render),
     );
 
-    let rpc_converter = |arc| {
-        DynamicHub::arc_into_rpc_module(arc)
-            .map_err(|e| anyhow::anyhow!("RPC error: {}", e))
-    };
+    let rpc_converter =
+        |arc| DynamicHub::arc_into_rpc_module(arc).map_err(|e| anyhow::anyhow!("RPC error: {e}"));
 
     let mut builder = TransportServer::builder(hub, rpc_converter);
 

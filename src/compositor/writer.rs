@@ -8,8 +8,10 @@ use std::path::{Path, PathBuf};
 
 /// Border style for drawing between panes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum BorderStyle {
     /// Single-line box drawing characters (─ │ ┌ ┐ └ ┘).
+    #[default]
     Single,
     /// Double-line box drawing characters (═ ║ ╔ ╗ ╚ ╝).
     Double,
@@ -19,13 +21,8 @@ pub enum BorderStyle {
     None,
 }
 
-impl Default for BorderStyle {
-    fn default() -> Self {
-        Self::Single
-    }
-}
 
-/// Type alias for CastTheme (re-exported from cast module).
+/// Type alias for `CastTheme` (re-exported from cast module).
 pub type CastTheme = Theme;
 
 /// Options for composite recording.
@@ -45,7 +42,7 @@ pub struct CompositeOpts {
 
     /// Border style between panes.
     ///
-    /// Default: BorderStyle::Single
+    /// Default: `BorderStyle::Single`
     pub border_style: BorderStyle,
 
     /// Optional title for the .cast header.
@@ -154,7 +151,7 @@ impl CompositeWriter {
 
         if timeline.is_empty() {
             return Err(CompositorError::InvalidDirectory(
-                "No events found in timeline".to_string()
+                "No events found in timeline".to_string(),
             ));
         }
 
@@ -189,7 +186,7 @@ impl CompositeWriter {
         let mut frame_count = 0;
         let frame_interval = 1.0 / self.opts.fps;
 
-        let total_duration = timeline.last().map(|(t, _)| *t).unwrap_or(0.0);
+        let total_duration = timeline.last().map_or(0.0, |(t, _)| *t);
         let mut last_progress_report = 0.0;
 
         // Process timeline in chronological order
@@ -231,24 +228,21 @@ impl CompositeWriter {
                         if let Some(state) = compositor.pane_states.get_mut(pane_id) {
                             state.process(bytes);
                         }
-                    }
+                    },
                     super::TimelineEvent::LayoutChange { event: layout_event } => {
-                        match layout_event {
-                            super::LayoutEvent::PaneResized { pane_id, width, height, .. } => {
-                                if let Some(state) = compositor.pane_states.get_mut(pane_id) {
-                                    state.resize(*width, *height);
-                                }
+                        if let super::LayoutEvent::PaneResized { pane_id, width, height, .. } = layout_event {
+                            if let Some(state) = compositor.pane_states.get_mut(pane_id) {
+                                state.resize(*width, *height);
                             }
-                            _ => {
-                                // Other layout events don't affect pane state
-                            }
+                        } else {
+                            // Other layout events don't affect pane state
                         }
-                    }
+                    },
                 }
             }
 
             // Calculate time for this frame (last event time in the batch)
-            let frame_time = events_to_process.last().map(|(t, _)| *t).unwrap_or(current_time);
+            let frame_time = events_to_process.last().map_or(current_time, |(t, _)| *t);
 
             // Apply idle time compression
             let mut time_delta = frame_time - last_event_time;
@@ -379,12 +373,13 @@ impl CompositeWriter {
         use super::frame::Cell;
 
         // Border characters for each style
-        let (h_line, v_line, tl_corner, tr_corner, bl_corner, br_corner) = match self.opts.border_style {
-            BorderStyle::Single => ('─', '│', '┌', '┐', '└', '┘'),
-            BorderStyle::Double => ('═', '║', '╔', '╗', '╚', '╝'),
-            BorderStyle::Heavy => ('━', '┃', '┏', '┓', '┗', '┛'),
-            BorderStyle::None => return, // No borders
-        };
+        let (h_line, v_line, tl_corner, tr_corner, bl_corner, br_corner) =
+            match self.opts.border_style {
+                BorderStyle::Single => ('─', '│', '┌', '┐', '└', '┘'),
+                BorderStyle::Double => ('═', '║', '╔', '╗', '╚', '╝'),
+                BorderStyle::Heavy => ('━', '┃', '┏', '┓', '┗', '┛'),
+                BorderStyle::None => return, // No borders
+            };
 
         for pane in layout {
             // Top border
@@ -427,7 +422,11 @@ impl CompositeWriter {
 
             // Corners
             if pane.y > 0 && pane.x > 0 {
-                frame.set_cell(pane.y.saturating_sub(1), pane.x.saturating_sub(1), Cell::new(tl_corner));
+                frame.set_cell(
+                    pane.y.saturating_sub(1),
+                    pane.x.saturating_sub(1),
+                    Cell::new(tl_corner),
+                );
             }
 
             if pane.y > 0 && pane.x + pane.width < frame.width {
@@ -435,7 +434,11 @@ impl CompositeWriter {
             }
 
             if pane.y + pane.height < frame.height && pane.x > 0 {
-                frame.set_cell(pane.y + pane.height, pane.x.saturating_sub(1), Cell::new(bl_corner));
+                frame.set_cell(
+                    pane.y + pane.height,
+                    pane.x.saturating_sub(1),
+                    Cell::new(bl_corner),
+                );
             }
 
             if pane.y + pane.height < frame.height && pane.x + pane.width < frame.width {
@@ -531,8 +534,12 @@ mod tests {
         };
 
         cast_writer.write_header(&header).unwrap();
-        cast_writer.write_event(&CastEvent::Output(0.1, "Hello, World!\n".to_string())).unwrap();
-        cast_writer.write_event(&CastEvent::Output(0.5, "This is a test.\n".to_string())).unwrap();
+        cast_writer
+            .write_event(&CastEvent::Output(0.1, "Hello, World!\n".to_string()))
+            .unwrap();
+        cast_writer
+            .write_event(&CastEvent::Output(0.5, "This is a test.\n".to_string()))
+            .unwrap();
         cast_writer.finish().unwrap();
 
         // Create composite writer and run
@@ -604,33 +611,39 @@ mod tests {
         // Create pane-1.cast
         let cast_path1 = temp_dir.join("pane-1.cast");
         let mut writer1 = CastWriter::create(&cast_path1).unwrap();
-        writer1.write_header(&CastHeader {
-            version: 2,
-            width: 20,
-            height: 10,
-            timestamp: Some(1234567890),
-            env: None,
-            title: Some("Pane 1".to_string()),
-            idle_time_limit: None,
-            theme: None,
-        }).unwrap();
+        writer1
+            .write_header(&CastHeader {
+                version: 2,
+                width: 20,
+                height: 10,
+                timestamp: Some(1234567890),
+                env: None,
+                title: Some("Pane 1".to_string()),
+                idle_time_limit: None,
+                theme: None,
+            })
+            .unwrap();
         writer1.write_event(&CastEvent::Output(0.1, "Left Pane\n".to_string())).unwrap();
         writer1.finish().unwrap();
 
         // Create pane-2.cast
         let cast_path2 = temp_dir.join("pane-2.cast");
         let mut writer2 = CastWriter::create(&cast_path2).unwrap();
-        writer2.write_header(&CastHeader {
-            version: 2,
-            width: 20,
-            height: 10,
-            timestamp: Some(1234567890),
-            env: None,
-            title: Some("Pane 2".to_string()),
-            idle_time_limit: None,
-            theme: None,
-        }).unwrap();
-        writer2.write_event(&CastEvent::Output(0.2, "Right Pane\n".to_string())).unwrap();
+        writer2
+            .write_header(&CastHeader {
+                version: 2,
+                width: 20,
+                height: 10,
+                timestamp: Some(1234567890),
+                env: None,
+                title: Some("Pane 2".to_string()),
+                idle_time_limit: None,
+                theme: None,
+            })
+            .unwrap();
+        writer2
+            .write_event(&CastEvent::Output(0.2, "Right Pane\n".to_string()))
+            .unwrap();
         writer2.finish().unwrap();
 
         // Create composite with borders
@@ -679,18 +692,24 @@ mod tests {
         // Create pane-1.cast with long pause
         let cast_path = temp_dir.join("pane-1.cast");
         let mut cast_writer = CastWriter::create(&cast_path).unwrap();
-        cast_writer.write_header(&CastHeader {
-            version: 2,
-            width: 40,
-            height: 10,
-            timestamp: Some(1234567890),
-            env: None,
-            title: None,
-            idle_time_limit: None,
-            theme: None,
-        }).unwrap();
-        cast_writer.write_event(&CastEvent::Output(0.1, "Before pause\n".to_string())).unwrap();
-        cast_writer.write_event(&CastEvent::Output(10.0, "After 10s pause\n".to_string())).unwrap();
+        cast_writer
+            .write_header(&CastHeader {
+                version: 2,
+                width: 40,
+                height: 10,
+                timestamp: Some(1234567890),
+                env: None,
+                title: None,
+                idle_time_limit: None,
+                theme: None,
+            })
+            .unwrap();
+        cast_writer
+            .write_event(&CastEvent::Output(0.1, "Before pause\n".to_string()))
+            .unwrap();
+        cast_writer
+            .write_event(&CastEvent::Output(10.0, "After 10s pause\n".to_string()))
+            .unwrap();
         cast_writer.finish().unwrap();
 
         // Create composite with idle limit
@@ -707,7 +726,11 @@ mod tests {
         let result = writer.run().unwrap();
 
         // Duration should be compressed (much less than 10s)
-        assert!(result.duration_secs < 5.0, "Expected compressed duration, got {}", result.duration_secs);
+        assert!(
+            result.duration_secs < 5.0,
+            "Expected compressed duration, got {}",
+            result.duration_secs
+        );
 
         // Cleanup
         fs::remove_dir_all(&temp_dir).ok();

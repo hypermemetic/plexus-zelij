@@ -4,8 +4,8 @@ use futures::Stream;
 use std::sync::Arc;
 
 use crate::backend::TerminalBackend;
-use crate::plexus::{ChildRouter, PlexusError, PlexusStream, Activation};
-use crate::types::*;
+use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
+use crate::types::{LocusEvent, TabOpts};
 
 /// Tabs sub-activation — manages terminal tabs (tmux windows).
 ///
@@ -87,10 +87,7 @@ impl TabsActivation {
 
     #[plexus_macros::hub_method(
         description = "Close a tab by index",
-        params(
-            index = "Tab index",
-            session = "Target session (default: current)"
-        )
+        params(index = "Tab index", session = "Target session (default: current)")
     )]
     async fn close(
         &self,
@@ -100,7 +97,7 @@ impl TabsActivation {
         let backend = self.backend.clone();
         stream! {
             match backend.close_tab(session.as_deref(), index).await {
-                Ok(()) => yield LocusEvent::Ok { message: format!("Closed tab {}", index) },
+                Ok(()) => yield LocusEvent::Ok { message: format!("Closed tab {index}") },
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }
@@ -108,10 +105,7 @@ impl TabsActivation {
 
     #[plexus_macros::hub_method(
         description = "Focus a tab by index",
-        params(
-            index = "Tab index",
-            session = "Target session (default: current)"
-        )
+        params(index = "Tab index", session = "Target session (default: current)")
     )]
     async fn focus(
         &self,
@@ -121,7 +115,7 @@ impl TabsActivation {
         let backend = self.backend.clone();
         stream! {
             match backend.focus_tab(session.as_deref(), index).await {
-                Ok(()) => yield LocusEvent::Ok { message: format!("Focused tab {}", index) },
+                Ok(()) => yield LocusEvent::Ok { message: format!("Focused tab {index}") },
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }
@@ -144,7 +138,7 @@ impl TabsActivation {
         let backend = self.backend.clone();
         stream! {
             match backend.rename_tab(session.as_deref(), index, &name).await {
-                Ok(()) => yield LocusEvent::Ok { message: format!("Renamed tab {} to {}", index, name) },
+                Ok(()) => yield LocusEvent::Ok { message: format!("Renamed tab {index} to {name}") },
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }
@@ -153,11 +147,15 @@ impl TabsActivation {
 
 #[async_trait]
 impl ChildRouter for TabsActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "tabs"
     }
 
-    async fn router_call(&self, method: &str, params: serde_json::Value) -> Result<PlexusStream, PlexusError> {
+    async fn router_call(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<PlexusStream, PlexusError> {
         Activation::call(self, method, params).await
     }
 

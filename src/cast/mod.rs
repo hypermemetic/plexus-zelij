@@ -4,7 +4,7 @@
 //! asciicast v2 format files (.cast). The format is NDJSON (newline-delimited JSON)
 //! with a header line followed by event lines.
 //!
-//! See: https://docs.asciinema.org/manual/asciicast/v2/
+//! See: <https://docs.asciinema.org/manual/asciicast/v2>/
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -66,7 +66,7 @@ pub struct CastHeader {
 }
 
 /// Color theme for rendering.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Theme {
     /// Foreground color (hex format: "#RRGGBB").
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -83,7 +83,7 @@ pub struct Theme {
 
 /// Asciicast v2 event.
 ///
-/// Events are written as JSON arrays: [time, event_type, ...data]
+/// Events are written as JSON arrays: [time, `event_type`, ...data]
 #[derive(Debug, Clone, PartialEq)]
 pub enum CastEvent {
     /// Output event: [time, "o", data]
@@ -101,12 +101,12 @@ pub enum CastEvent {
 
 impl CastEvent {
     /// Get the timestamp of this event.
-    pub fn time(&self) -> f64 {
+    pub const fn time(&self) -> f64 {
         match self {
-            CastEvent::Output(t, _) => *t,
-            CastEvent::Input(t, _) => *t,
-            CastEvent::Resize(t, _, _) => *t,
-            CastEvent::Marker(t, _) => *t,
+            Self::Output(t, _) => *t,
+            Self::Input(t, _) => *t,
+            Self::Resize(t, _, _) => *t,
+            Self::Marker(t, _) => *t,
         }
     }
 }
@@ -119,34 +119,34 @@ impl Serialize for CastEvent {
         use serde::ser::SerializeSeq;
 
         match self {
-            CastEvent::Output(time, data) => {
+            Self::Output(time, data) => {
                 let mut seq = serializer.serialize_seq(Some(3))?;
                 seq.serialize_element(time)?;
                 seq.serialize_element("o")?;
                 seq.serialize_element(data)?;
                 seq.end()
-            }
-            CastEvent::Input(time, data) => {
+            },
+            Self::Input(time, data) => {
                 let mut seq = serializer.serialize_seq(Some(3))?;
                 seq.serialize_element(time)?;
                 seq.serialize_element("i")?;
                 seq.serialize_element(data)?;
                 seq.end()
-            }
-            CastEvent::Resize(time, cols, rows) => {
+            },
+            Self::Resize(time, cols, rows) => {
                 let mut seq = serializer.serialize_seq(Some(4))?;
                 seq.serialize_element(time)?;
                 seq.serialize_element("r")?;
-                seq.serialize_element(&format!("{}x{}", cols, rows))?;
+                seq.serialize_element(&format!("{cols}x{rows}"))?;
                 seq.end()
-            }
-            CastEvent::Marker(time, label) => {
+            },
+            Self::Marker(time, label) => {
                 let mut seq = serializer.serialize_seq(Some(3))?;
                 seq.serialize_element(time)?;
                 seq.serialize_element("m")?;
                 seq.serialize_element(label)?;
                 seq.end()
-            }
+            },
         }
     }
 }
@@ -173,37 +173,47 @@ impl<'de> Deserialize<'de> for CastEvent {
                 if arr.len() < 3 {
                     return Err(D::Error::custom("output event missing data"));
                 }
-                let data = arr[2].as_str().ok_or_else(|| D::Error::custom("invalid output data"))?.to_string();
-                Ok(CastEvent::Output(time, data))
-            }
+                let data = arr[2]
+                    .as_str()
+                    .ok_or_else(|| D::Error::custom("invalid output data"))?
+                    .to_string();
+                Ok(Self::Output(time, data))
+            },
             "i" => {
                 if arr.len() < 3 {
                     return Err(D::Error::custom("input event missing data"));
                 }
-                let data = arr[2].as_str().ok_or_else(|| D::Error::custom("invalid input data"))?.to_string();
-                Ok(CastEvent::Input(time, data))
-            }
+                let data = arr[2]
+                    .as_str()
+                    .ok_or_else(|| D::Error::custom("invalid input data"))?
+                    .to_string();
+                Ok(Self::Input(time, data))
+            },
             "r" => {
                 if arr.len() < 3 {
                     return Err(D::Error::custom("resize event missing dimensions"));
                 }
-                let dims = arr[2].as_str().ok_or_else(|| D::Error::custom("invalid resize dimensions"))?;
+                let dims =
+                    arr[2].as_str().ok_or_else(|| D::Error::custom("invalid resize dimensions"))?;
                 let parts: Vec<&str> = dims.split('x').collect();
                 if parts.len() != 2 {
                     return Err(D::Error::custom("invalid resize format"));
                 }
                 let cols: u16 = parts[0].parse().map_err(|_| D::Error::custom("invalid cols"))?;
                 let rows: u16 = parts[1].parse().map_err(|_| D::Error::custom("invalid rows"))?;
-                Ok(CastEvent::Resize(time, cols, rows))
-            }
+                Ok(Self::Resize(time, cols, rows))
+            },
             "m" => {
                 if arr.len() < 3 {
                     return Err(D::Error::custom("marker event missing label"));
                 }
-                let label = arr[2].as_str().ok_or_else(|| D::Error::custom("invalid marker label"))?.to_string();
-                Ok(CastEvent::Marker(time, label))
-            }
-            _ => Err(D::Error::custom(format!("unknown event type: {}", event_type))),
+                let label = arr[2]
+                    .as_str()
+                    .ok_or_else(|| D::Error::custom("invalid marker label"))?
+                    .to_string();
+                Ok(Self::Marker(time, label))
+            },
+            _ => Err(D::Error::custom(format!("unknown event type: {event_type}"))),
         }
     }
 }
@@ -221,9 +231,7 @@ impl CastWriter {
     /// The file is created (or truncated if it exists).
     pub fn create(path: impl AsRef<Path>) -> Result<Self> {
         let file = File::create(path)?;
-        Ok(Self {
-            writer: BufWriter::new(file),
-        })
+        Ok(Self { writer: BufWriter::new(file) })
     }
 
     /// Write the header line.
@@ -231,14 +239,14 @@ impl CastWriter {
     /// This must be called exactly once before writing any events.
     pub fn write_header(&mut self, header: &CastHeader) -> Result<()> {
         let json = serde_json::to_string(header)?;
-        writeln!(self.writer, "{}", json)?;
+        writeln!(self.writer, "{json}")?;
         Ok(())
     }
 
     /// Write an event line.
     pub fn write_event(&mut self, event: &CastEvent) -> Result<()> {
         let json = serde_json::to_string(event)?;
-        writeln!(self.writer, "{}", json)?;
+        writeln!(self.writer, "{json}")?;
         Ok(())
     }
 
@@ -294,17 +302,15 @@ impl CastReader {
     }
 
     /// Get the header.
-    pub fn header(&self) -> &CastHeader {
+    pub const fn header(&self) -> &CastHeader {
         &self.header
     }
 
     /// Get an iterator over events.
     ///
-    /// Each line after the header is parsed as a CastEvent.
+    /// Each line after the header is parsed as a `CastEvent`.
     pub fn events(self) -> EventIterator {
-        EventIterator {
-            reader: self.reader,
-        }
+        EventIterator { reader: self.reader }
     }
 }
 
@@ -328,7 +334,7 @@ impl Iterator for EventIterator {
                     return self.next();
                 }
                 Some(serde_json::from_str(line).map_err(CastError::from))
-            }
+            },
             Err(e) => Some(Err(CastError::from(e))),
         }
     }
@@ -429,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_empty_output() {
-        let event = CastEvent::Output(1.0, "".to_string());
+        let event = CastEvent::Output(1.0, String::new());
         let json = serde_json::to_string(&event).unwrap();
         let parsed: CastEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(event, parsed);
@@ -472,9 +478,7 @@ mod tests {
             assert_eq!(reader.header().height, 24);
             assert_eq!(reader.header().title, Some("Roundtrip Test".to_string()));
 
-            let events: Vec<CastEvent> = reader.events()
-                .collect::<Result<Vec<_>>>()
-                .unwrap();
+            let events: Vec<CastEvent> = reader.events().collect::<Result<Vec<_>>>().unwrap();
 
             assert_eq!(events.len(), 4);
             assert_eq!(events[0], CastEvent::Output(0.0, "Hello\n".to_string()));
@@ -508,18 +512,22 @@ mod tests {
             };
 
             writer.write_header(&header).unwrap();
-            writer.write_event(&CastEvent::Output(0.0, "Unicode: 世界 🌍\n".to_string())).unwrap();
-            writer.write_event(&CastEvent::Output(1.0, "\x1b[31mRed\x1b[0m\n".to_string())).unwrap();
-            writer.write_event(&CastEvent::Output(2.0, "Null:\x00 Bell:\x07\n".to_string())).unwrap();
+            writer
+                .write_event(&CastEvent::Output(0.0, "Unicode: 世界 🌍\n".to_string()))
+                .unwrap();
+            writer
+                .write_event(&CastEvent::Output(1.0, "\x1b[31mRed\x1b[0m\n".to_string()))
+                .unwrap();
+            writer
+                .write_event(&CastEvent::Output(2.0, "Null:\x00 Bell:\x07\n".to_string()))
+                .unwrap();
             writer.finish().unwrap();
         }
 
         // Read
         {
             let reader = CastReader::open(&path).unwrap();
-            let events: Vec<CastEvent> = reader.events()
-                .collect::<Result<Vec<_>>>()
-                .unwrap();
+            let events: Vec<CastEvent> = reader.events().collect::<Result<Vec<_>>>().unwrap();
 
             assert_eq!(events.len(), 3);
             assert_eq!(events[0], CastEvent::Output(0.0, "Unicode: 世界 🌍\n".to_string()));

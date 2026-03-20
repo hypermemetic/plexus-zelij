@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::types::*;
+use crate::types::{Session, SessionOpts, Tab, TabOpts, Pane, PaneOpts, Direction, RunOpts};
 
 /// Errors from a terminal backend.
 #[derive(Debug, thiserror::Error)]
@@ -31,7 +31,7 @@ pub type BackendResult<T> = Result<T, BackendError>;
 
 /// Abstract terminal workspace backend.
 ///
-/// Zellij, tmux, WezTerm, or anything that can manage panes/tabs/sessions.
+/// Zellij, tmux, `WezTerm`, or anything that can manage panes/tabs/sessions.
 /// Locus doesn't care which — it talks through this trait.
 #[async_trait]
 pub trait TerminalBackend: Send + Sync + 'static {
@@ -76,7 +76,8 @@ pub trait TerminalBackend: Send + Sync + 'static {
             }
         } else {
             // Lookup by name
-            panes.iter()
+            panes
+                .iter()
                 .find(|p| p.name.as_deref() == Some(pane))
                 .map(|p| p.id.0.clone())
                 .ok_or_else(|| BackendError::PaneNotFound(pane.to_string()))
@@ -85,29 +86,49 @@ pub trait TerminalBackend: Send + Sync + 'static {
 
     /// Check if a pane still exists
     async fn pane_exists(&self, pane_id: &str) -> bool {
-        self.list_panes(None, None).await
+        self.list_panes(None, None)
+            .await
             .map(|panes| panes.iter().any(|p| p.id.0 == pane_id))
             .unwrap_or(false)
     }
 
-    async fn list_panes(&self, session: Option<&str>, tab: Option<&str>) -> BackendResult<Vec<Pane>>;
+    async fn list_panes(
+        &self,
+        session: Option<&str>,
+        tab: Option<&str>,
+    ) -> BackendResult<Vec<Pane>>;
     async fn create_pane(&self, opts: &PaneOpts) -> BackendResult<Pane>;
     async fn close_pane(&self, pane: Option<&str>) -> BackendResult<()>;
     async fn focus_pane(&self, direction: Direction) -> BackendResult<()>;
     async fn rename_pane(&self, name: &str, pane: Option<&str>) -> BackendResult<()>;
     async fn toggle_floating(&self) -> BackendResult<()>;
     async fn toggle_fullscreen(&self) -> BackendResult<()>;
-    async fn resize_pane(&self, direction: Direction, amount: Option<u32>, pane: Option<&str>) -> BackendResult<()>;
+    async fn resize_pane(
+        &self,
+        direction: Direction,
+        amount: Option<u32>,
+        pane: Option<&str>,
+    ) -> BackendResult<()>;
 
     // ========================================================================
     // Input / Output
     // ========================================================================
 
     /// Send keystrokes to a pane (specific pane by ID, or focused if None)
-    async fn write_chars(&self, chars: &str, session: Option<&str>, pane: Option<&str>) -> BackendResult<()>;
+    async fn write_chars(
+        &self,
+        chars: &str,
+        session: Option<&str>,
+        pane: Option<&str>,
+    ) -> BackendResult<()>;
 
     /// Capture the screen content of a pane (specific pane by ID, or focused if None)
-    async fn dump_screen(&self, path: &str, full_scrollback: bool, pane: Option<&str>) -> BackendResult<String>;
+    async fn dump_screen(
+        &self,
+        path: &str,
+        full_scrollback: bool,
+        pane: Option<&str>,
+    ) -> BackendResult<String>;
 
     /// Dump the current layout definition
     async fn dump_layout(&self) -> BackendResult<String>;

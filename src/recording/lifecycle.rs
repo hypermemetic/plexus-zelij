@@ -59,10 +59,7 @@ pub struct LifecycleConfig {
 
 impl Default for LifecycleConfig {
     fn default() -> Self {
-        Self {
-            poll_interval: Duration::from_secs(1),
-            snapshot_interval: Duration::from_secs(5),
-        }
+        Self { poll_interval: Duration::from_secs(1), snapshot_interval: Duration::from_secs(5) }
     }
 }
 
@@ -72,9 +69,9 @@ impl Default for LifecycleConfig {
 /// the recording session and layout journal accordingly.
 pub struct LifecycleMonitor {
     session_id: String,
-    recording: Arc<Mutex<RecordingSession>>,
-    journal: Arc<Mutex<LayoutJournal>>,
-    config: LifecycleConfig,
+    _recording: Arc<Mutex<RecordingSession>>,
+    _journal: Arc<Mutex<LayoutJournal>>,
+    _config: LifecycleConfig,
     task_handle: Option<JoinHandle<()>>,
     abort_handle: Option<AbortHandle>,
 }
@@ -109,22 +106,17 @@ impl LifecycleMonitor {
         let config_clone = config.clone();
 
         let task_handle = tokio::spawn(async move {
-            Self::monitor_loop(
-                session_id_clone,
-                recording_clone,
-                journal_clone,
-                config_clone,
-            )
-            .await;
+            Self::monitor_loop(session_id_clone, recording_clone, journal_clone, config_clone)
+                .await;
         });
 
         let abort_handle = task_handle.abort_handle();
 
         Self {
             session_id,
-            recording,
-            journal,
-            config,
+            _recording: recording,
+            _journal: journal,
+            _config: config,
             task_handle: Some(task_handle),
             abort_handle: Some(abort_handle),
         }
@@ -175,7 +167,7 @@ impl LifecycleMonitor {
                 Err(e) => {
                     error!("Failed to query layout for {}: {}", session_id, e);
                     continue;
-                }
+                },
             };
 
             // Detect and handle changes
@@ -205,7 +197,7 @@ impl LifecycleMonitor {
                         }) {
                             error!("Failed to write PaneOpened event: {}", e);
                         }
-                    }
+                    },
                     LayoutChange::PaneClosed(pane_id) => {
                         debug!("Detected closed pane: {}", pane_id);
 
@@ -221,12 +213,12 @@ impl LifecycleMonitor {
 
                         // Write event to journal
                         let mut j = journal.lock().await;
-                        if let Err(e) = j.write_event(LayoutEvent::PaneClosed {
-                            pane_id: pane_id.clone(),
-                        }) {
+                        if let Err(e) =
+                            j.write_event(LayoutEvent::PaneClosed { pane_id: pane_id.clone() })
+                        {
                             error!("Failed to write PaneClosed event: {}", e);
                         }
-                    }
+                    },
                     LayoutChange::PaneResized(geom) => {
                         debug!("Detected pane resize/move: {}", geom.pane_id);
 
@@ -241,7 +233,7 @@ impl LifecycleMonitor {
                         }) {
                             error!("Failed to write PaneResized event: {}", e);
                         }
-                    }
+                    },
                 }
             }
 
@@ -257,9 +249,7 @@ impl LifecycleMonitor {
 
                     // Write event to journal
                     let mut j = journal.lock().await;
-                    if let Err(e) = j.write_event(LayoutEvent::TabSwitched {
-                        tab_index: new_tab,
-                    }) {
+                    if let Err(e) = j.write_event(LayoutEvent::TabSwitched { tab_index: new_tab }) {
                         error!("Failed to write TabSwitched event: {}", e);
                     }
                 }
@@ -285,10 +275,10 @@ impl LifecycleMonitor {
 
     /// Query current layout from tmux.
     ///
-    /// Returns a map of pane_id -> PaneGeometry for all panes in the session.
+    /// Returns a map of `pane_id` -> `PaneGeometry` for all panes in the session.
     async fn query_layout(session_id: &str) -> Result<HashMap<String, PaneGeometry>> {
         let output = Command::new("tmux")
-            .args(&[
+            .args([
                 "list-panes",
                 "-s",
                 "-t",
@@ -365,18 +355,12 @@ impl LifecycleMonitor {
 
     /// Get the active tab (window) index from the current state.
     ///
-    /// Finds the first pane in an active window and returns its tab_index.
-    /// We rely on the fact that tmux list-panes includes #{window_active} flag.
+    /// Finds the first pane in an active window and returns its `tab_index`.
+    /// We rely on the fact that tmux list-panes includes #{`window_active`} flag.
+    #[allow(dead_code)]
     async fn get_active_tab_from_tmux(session_id: &str) -> Result<Option<u32>> {
         let output = Command::new("tmux")
-            .args(&[
-                "list-panes",
-                "-s",
-                "-t",
-                session_id,
-                "-F",
-                "#{window_index} #{window_active}",
-            ])
+            .args(["list-panes", "-s", "-t", session_id, "-F", "#{window_index} #{window_active}"])
             .output()
             .await?;
 
@@ -404,11 +388,11 @@ impl LifecycleMonitor {
 
     /// Get active tab index from the current layout state.
     ///
-    /// This is a simpler version that just picks the first pane's tab_index.
+    /// This is a simpler version that just picks the first pane's `tab_index`.
     /// In practice, we should query tmux for the active window, but for simplicity
-    /// we can just track which tab_index we see most recently.
+    /// we can just track which `tab_index` we see most recently.
     ///
-    /// TODO: Use #{window_active} flag to determine which window is actually active
+    /// TODO: Use #{`window_active`} flag to determine which window is actually active
     fn get_active_tab(state: &HashMap<String, PaneGeometry>) -> Option<u32> {
         // For now, just return the first pane's tab_index
         // In a real implementation, we'd query tmux for #{window_active}
@@ -441,7 +425,7 @@ mod tests {
             height: 24,
             tab_index: 0,
         };
-        current.insert("%1".to_string(), geom.clone());
+        current.insert("%1".to_string(), geom);
 
         let changes = LifecycleMonitor::detect_changes(&previous, &current);
 
@@ -581,7 +565,7 @@ mod tests {
             height: 24,
             tab_index: 0,
         };
-        state.insert("%1".to_string(), geom.clone());
+        state.insert("%1".to_string(), geom);
 
         let changes = LifecycleMonitor::detect_changes(&state, &state);
 

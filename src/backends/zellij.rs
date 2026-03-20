@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use tokio::process::Command;
 
-use crate::backend::*;
-use crate::types::*;
+use crate::backend::{BackendResult, BackendError, TerminalBackend};
+use crate::types::{PaneId, TabId, Session, SessionId, Tab, SessionOpts, TabOpts, Pane, PaneOpts, Direction, RunOpts};
 
 /// Zellij backend — controls Zellij via its CLI.
 ///
@@ -15,9 +15,7 @@ pub struct Zellij {
 
 impl Zellij {
     pub fn new() -> Self {
-        Self {
-            bin: "zellij".to_string(),
-        }
+        Self { bin: "zellij".to_string() }
     }
 
     pub fn with_bin(bin: impl Into<String>) -> Self {
@@ -51,16 +49,16 @@ impl Zellij {
         self.exec(&full_args).await
     }
 
-    /// Build a synthetic PaneId from session context
+    /// Build a synthetic `PaneId` from session context
     fn make_pane_id(session: Option<&str>, name: Option<&str>) -> PaneId {
         let session_part = session.unwrap_or("current");
         let name_part = name.unwrap_or("unnamed");
-        PaneId(format!("{}:{}", session_part, name_part))
+        PaneId(format!("{session_part}:{name_part}"))
     }
 
     fn make_tab_id(session: Option<&str>, index: u32) -> TabId {
         let session_part = session.unwrap_or("current");
-        TabId(format!("{}:tab-{}", session_part, index))
+        TabId(format!("{session_part}:tab-{index}"))
     }
 
     /// Parse `zellij list-sessions` output into Session structs.
@@ -76,9 +74,9 @@ impl Zellij {
                 let attached = line.contains("(current)");
                 let exited = line.contains("EXITED");
                 Session {
-                    id: SessionId(format!("session-{}", i)),
+                    id: SessionId(format!("session-{i}")),
                     name,
-                    tabs: 0,    // zellij ls doesn't expose this
+                    tabs: 0, // zellij ls doesn't expose this
                     panes: 0,
                     attached: attached && !exited,
                 }
@@ -113,7 +111,7 @@ impl Default for Zellij {
 
 #[async_trait]
 impl TerminalBackend for Zellij {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "zellij"
     }
 
@@ -174,9 +172,7 @@ impl TerminalBackend for Zellij {
     // ========================================================================
 
     async fn list_tabs(&self, session: Option<&str>) -> BackendResult<Vec<Tab>> {
-        let output = self
-            .exec_session(session, &["action", "query-tab-names"])
-            .await?;
+        let output = self.exec_session(session, &["action", "query-tab-names"]).await?;
         Ok(Self::parse_tab_names(&output, session))
     }
 
@@ -217,14 +213,17 @@ impl TerminalBackend for Zellij {
 
     async fn focus_tab(&self, session: Option<&str>, index: u32) -> BackendResult<()> {
         let index_str = index.to_string();
-        self.exec_session(session, &["action", "go-to-tab", &index_str])
-            .await?;
+        self.exec_session(session, &["action", "go-to-tab", &index_str]).await?;
         Ok(())
     }
 
-    async fn rename_tab(&self, session: Option<&str>, _index: u32, name: &str) -> BackendResult<()> {
-        self.exec_session(session, &["action", "rename-tab", name])
-            .await?;
+    async fn rename_tab(
+        &self,
+        session: Option<&str>,
+        _index: u32,
+        name: &str,
+    ) -> BackendResult<()> {
+        self.exec_session(session, &["action", "rename-tab", name]).await?;
         Ok(())
     }
 
@@ -232,7 +231,11 @@ impl TerminalBackend for Zellij {
     // Panes
     // ========================================================================
 
-    async fn list_panes(&self, _session: Option<&str>, _tab: Option<&str>) -> BackendResult<Vec<Pane>> {
+    async fn list_panes(
+        &self,
+        _session: Option<&str>,
+        _tab: Option<&str>,
+    ) -> BackendResult<Vec<Pane>> {
         // Zellij CLI doesn't expose pane listing
         Ok(Vec::new())
     }
@@ -289,8 +292,7 @@ impl TerminalBackend for Zellij {
     }
 
     async fn focus_pane(&self, direction: Direction) -> BackendResult<()> {
-        self.exec(&["action", "move-focus", direction.as_str()])
-            .await?;
+        self.exec(&["action", "move-focus", direction.as_str()]).await?;
         Ok(())
     }
 
@@ -309,7 +311,12 @@ impl TerminalBackend for Zellij {
         Ok(())
     }
 
-    async fn resize_pane(&self, direction: Direction, _amount: Option<u32>, _pane: Option<&str>) -> BackendResult<()> {
+    async fn resize_pane(
+        &self,
+        direction: Direction,
+        _amount: Option<u32>,
+        _pane: Option<&str>,
+    ) -> BackendResult<()> {
         self.exec(&["action", "resize", direction.as_str()]).await?;
         Ok(())
     }
@@ -318,13 +325,22 @@ impl TerminalBackend for Zellij {
     // Input / Output
     // ========================================================================
 
-    async fn write_chars(&self, chars: &str, session: Option<&str>, _pane: Option<&str>) -> BackendResult<()> {
-        self.exec_session(session, &["action", "write-chars", chars])
-            .await?;
+    async fn write_chars(
+        &self,
+        chars: &str,
+        session: Option<&str>,
+        _pane: Option<&str>,
+    ) -> BackendResult<()> {
+        self.exec_session(session, &["action", "write-chars", chars]).await?;
         Ok(())
     }
 
-    async fn dump_screen(&self, path: &str, full_scrollback: bool, _pane: Option<&str>) -> BackendResult<String> {
+    async fn dump_screen(
+        &self,
+        path: &str,
+        full_scrollback: bool,
+        _pane: Option<&str>,
+    ) -> BackendResult<String> {
         let mut args = vec!["action", "dump-screen", path];
         if full_scrollback {
             args.push("--full");
@@ -334,7 +350,7 @@ impl TerminalBackend for Zellij {
         // Read back the file
         tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| BackendError::CommandFailed(format!("Failed to read dump: {}", e)))
+            .map_err(|e| BackendError::CommandFailed(format!("Failed to read dump: {e}")))
     }
 
     async fn dump_layout(&self) -> BackendResult<String> {

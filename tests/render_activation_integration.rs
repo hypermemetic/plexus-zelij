@@ -1,16 +1,18 @@
-//! Integration tests for RenderActivation.
+//! Integration tests for `RenderActivation`.
 //!
 //! Tests the render activation with real recording directories.
 
+use futures::StreamExt;
 use plexus_locus::activations::RenderActivation;
 use plexus_locus::cast::{CastEvent, CastHeader, CastWriter};
 use plexus_locus::plexus::Activation;
 use std::fs;
 use std::path::PathBuf;
-use futures::StreamExt;
 
-/// Helper to collect events from a PlexusStream (items are already JSON values)
-async fn collect_stream_items(stream: plexus_locus::plexus::PlexusStream) -> Vec<serde_json::Value> {
+/// Helper to collect events from a `PlexusStream` (items are already JSON values)
+async fn collect_stream_items(
+    stream: plexus_locus::plexus::PlexusStream,
+) -> Vec<serde_json::Value> {
     stream
         .map(|item| {
             // Convert PlexusStreamItem to serde_json::Value
@@ -22,7 +24,8 @@ async fn collect_stream_items(stream: plexus_locus::plexus::PlexusStream) -> Vec
 
 /// Create a test recording directory with sample data.
 fn create_test_recording() -> anyhow::Result<PathBuf> {
-    let temp_dir = std::env::temp_dir().join(format!("test_render_activation_{}",
+    let temp_dir = std::env::temp_dir().join(format!(
+        "test_render_activation_{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -88,8 +91,9 @@ async fn test_render_activation_info() {
 
     // Find the RecordingInfo event (content is nested)
     let info_event = items.iter().find(|item| {
-        item.get("type").and_then(|v| v.as_str()) == Some("data") &&
-        item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str()) == Some("recording_info")
+        item.get("type").and_then(|v| v.as_str()) == Some("data")
+            && item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str())
+                == Some("recording_info")
     });
 
     assert!(info_event.is_some(), "Expected to find a recording_info event");
@@ -124,8 +128,9 @@ async fn test_render_activation_preview() {
 
     // Find the PreviewFrame event (content is nested)
     let preview_event = items.iter().find(|item| {
-        item.get("type").and_then(|v| v.as_str()) == Some("data") &&
-        item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str()) == Some("preview_frame")
+        item.get("type").and_then(|v| v.as_str()) == Some("data")
+            && item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str())
+                == Some("preview_frame")
     });
 
     assert!(preview_event.is_some(), "Expected to find a preview_frame event");
@@ -133,8 +138,8 @@ async fn test_render_activation_preview() {
 
     // Verify it has expected fields
     assert!(preview.get("content").is_some());
-    assert_eq!(preview.get("width").and_then(|v| v.as_u64()), Some(80));
-    assert_eq!(preview.get("height").and_then(|v| v.as_u64()), Some(24));
+    assert_eq!(preview.get("width").and_then(serde_json::Value::as_u64), Some(80));
+    assert_eq!(preview.get("height").and_then(serde_json::Value::as_u64), Some(24));
 
     // Cleanup
     fs::remove_dir_all(&recording_dir).ok();
@@ -163,15 +168,16 @@ async fn test_render_activation_render() {
 
     // Find the RenderComplete event (content is nested)
     let complete_event = items.iter().find(|item| {
-        item.get("type").and_then(|v| v.as_str()) == Some("data") &&
-        item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str()) == Some("render_complete")
+        item.get("type").and_then(|v| v.as_str()) == Some("data")
+            && item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str())
+                == Some("render_complete")
     });
 
     assert!(complete_event.is_some(), "Expected to find a render_complete event");
     let complete = complete_event.unwrap().get("content").unwrap();
 
     assert!(complete.get("output_path").is_some());
-    assert!(complete.get("frame_count").and_then(|v| v.as_u64()).unwrap() > 0);
+    assert!(complete.get("frame_count").and_then(serde_json::Value::as_u64).unwrap() > 0);
 
     // Check that output file was created
     assert!(output_path.exists());
@@ -201,8 +207,9 @@ async fn test_render_activation_missing_recording() {
 
     // Find the Error event (content is nested)
     let error_event = items.iter().find(|item| {
-        item.get("type").and_then(|v| v.as_str()) == Some("data") &&
-        item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str()) == Some("error")
+        item.get("type").and_then(|v| v.as_str()) == Some("data")
+            && item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str())
+                == Some("error")
     });
 
     assert!(error_event.is_some(), "Expected to find an error event");
@@ -229,7 +236,7 @@ async fn test_render_with_border_styles() {
     let activation = RenderActivation::new();
 
     for border_style in &["single", "double", "heavy", "none"] {
-        let output_path = recording_dir.join(format!("test_{}.cast", border_style));
+        let output_path = recording_dir.join(format!("test_{border_style}.cast"));
 
         let params = serde_json::json!({
             "recording_dir": recording_dir.to_string_lossy().to_string(),
@@ -245,15 +252,12 @@ async fn test_render_with_border_styles() {
         // Find RenderComplete event (content is nested)
         assert!(!items.is_empty());
         let complete_event = items.iter().find(|item| {
-            item.get("type").and_then(|v| v.as_str()) == Some("data") &&
-            item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str()) == Some("render_complete")
+            item.get("type").and_then(|v| v.as_str()) == Some("data")
+                && item.get("content").and_then(|c| c.get("type")).and_then(|v| v.as_str())
+                    == Some("render_complete")
         });
 
-        assert!(
-            complete_event.is_some(),
-            "Expected RenderComplete for border {}",
-            border_style
-        );
+        assert!(complete_event.is_some(), "Expected RenderComplete for border {border_style}");
 
         assert!(output_path.exists());
     }

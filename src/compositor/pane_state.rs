@@ -31,12 +31,7 @@ impl PaneState {
         // Create parser with zero scrollback (we don't need it for compositing)
         let parser = vt100::Parser::new(height, width, 0);
 
-        Self {
-            pane_id,
-            width,
-            height,
-            parser,
-        }
+        Self { pane_id, width, height, parser }
     }
 
     /// Process raw output bytes.
@@ -75,7 +70,7 @@ impl PaneState {
         }
 
         let vt_cell = self.parser.screen().cell(row, col)?;
-        Some(Cell::from_vt100(&vt_cell))
+        Some(Cell::from_vt100(vt_cell))
     }
 
     /// Get all cells as a 2D vector.
@@ -88,7 +83,7 @@ impl PaneState {
             let mut row_cells = Vec::with_capacity(self.width as usize);
             for col in 0..self.width {
                 if let Some(vt_cell) = self.parser.screen().cell(row, col) {
-                    row_cells.push(Cell::from_vt100(&vt_cell));
+                    row_cells.push(Cell::from_vt100(vt_cell));
                 } else {
                     row_cells.push(Cell::default());
                 }

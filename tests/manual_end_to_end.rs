@@ -1,42 +1,42 @@
 //! Manual end-to-end test that requires tmux to be running.
 //!
 //! This test verifies:
-//! 1. RecordingSession can start/stop with real tmux panes
+//! 1. `RecordingSession` can start/stop with real tmux panes
 //! 2. Layout journal captures real tmux layout
 //! 3. Compositor can render real recordings
 //! 4. Output .cast file is valid and playable
 //!
-//! Run with: cargo test --test manual_end_to_end -- --ignored --nocapture
+//! Run with: cargo test --test `manual_end_to_end` -- --ignored --nocapture
 
-use plexus_locus::recording::{RecordingSession, LayoutJournal};
-use plexus_locus::compositor::{CompositeWriter, CompositeOpts, BorderStyle};
 use plexus_locus::cast::CastReader;
-use std::time::Instant;
-use std::process::Command;
+use plexus_locus::compositor::{BorderStyle, CompositeOpts, CompositeWriter};
+use plexus_locus::recording::{LayoutJournal, RecordingSession};
 use std::fs;
+use std::process::Command;
+use std::time::Instant;
 use tokio::time::{sleep, Duration};
 
 /// Helper to create a tmux session with 2 panes
 fn create_test_tmux_session(session_name: &str) -> anyhow::Result<()> {
     // Create session
     Command::new("tmux")
-        .args(&["new-session", "-d", "-s", session_name, "-x", "80", "-y", "24"])
+        .args(["new-session", "-d", "-s", session_name, "-x", "80", "-y", "24"])
         .status()?;
 
     // Split horizontally
     Command::new("tmux")
-        .args(&["split-window", "-h", "-t", session_name])
+        .args(["split-window", "-h", "-t", session_name])
         .status()?;
 
     // Send commands to generate output
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.0", session_name), "echo 'Left pane'", "C-m"])
+        .args(["send-keys", "-t", &format!("{session_name}:0.0"), "echo 'Left pane'", "C-m"])
         .status()?;
 
     std::thread::sleep(std::time::Duration::from_millis(200));
 
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.1", session_name), "echo 'Right pane'", "C-m"])
+        .args(["send-keys", "-t", &format!("{session_name}:0.1"), "echo 'Right pane'", "C-m"])
         .status()?;
 
     std::thread::sleep(std::time::Duration::from_millis(200));
@@ -46,10 +46,7 @@ fn create_test_tmux_session(session_name: &str) -> anyhow::Result<()> {
 
 /// Cleanup tmux session
 fn kill_tmux_session(session_name: &str) {
-    Command::new("tmux")
-        .args(&["kill-session", "-t", session_name])
-        .status()
-        .ok();
+    Command::new("tmux").args(["kill-session", "-t", session_name]).status().ok();
 }
 
 #[tokio::test]
@@ -68,11 +65,11 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
 
     // Verify panes exist
     let panes_output = Command::new("tmux")
-        .args(&["list-panes", "-s", "-t", session_name, "-F", "#{pane_id}"])
+        .args(["list-panes", "-s", "-t", session_name, "-F", "#{pane_id}"])
         .output()?;
     let panes = String::from_utf8(panes_output.stdout)?;
-    println!("Found panes:\n{}", panes);
-    assert!(panes.contains("%"), "Should have pane IDs");
+    println!("Found panes:\n{panes}");
+    assert!(panes.contains('%'), "Should have pane IDs");
 
     println!("\n=== Phase 2: Start RecordingSession ===");
     let start_time = Instant::now();
@@ -82,21 +79,21 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
     journal.snapshot(session_name).await?;
 
     // Start recording session
-    let mut recording = RecordingSession::start(session_name, output_dir).await?;
-    println!("Recording started for session: {}", session_name);
+    let recording = RecordingSession::start(session_name, output_dir).await?;
+    println!("Recording started for session: {session_name}");
 
     // Let it record for 2 seconds
     sleep(Duration::from_secs(2)).await;
 
     // Send more commands while recording
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.0", session_name), "date", "C-m"])
+        .args(["send-keys", "-t", &format!("{session_name}:0.0"), "date", "C-m"])
         .status()?;
 
     sleep(Duration::from_millis(500)).await;
 
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.1", session_name), "whoami", "C-m"])
+        .args(["send-keys", "-t", &format!("{session_name}:0.1"), "whoami", "C-m"])
         .status()?;
 
     sleep(Duration::from_millis(500)).await;
@@ -108,7 +105,7 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
     println!("Recorded {} panes", cast_files.len());
 
     // List all files in output_dir to see what was created
-    println!("\nFiles in {}:", output_dir);
+    println!("\nFiles in {output_dir}:");
     for entry in fs::read_dir(output_dir)? {
         let entry = entry?;
         let metadata = entry.metadata()?;
@@ -116,8 +113,8 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
     }
 
     for (i, path) in cast_files.iter().enumerate() {
-        println!("  Pane {}: {:?}", i, path);
-        assert!(path.exists(), "Cast file should exist: {:?}", path);
+        println!("  Pane {i}: {path:?}");
+        assert!(path.exists(), "Cast file should exist: {path:?}");
     }
 
     if cast_files.is_empty() {
@@ -134,7 +131,8 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
     println!("\n=== Phase 4: Verify .cast files ===");
     for cast_file in &cast_files {
         let reader = CastReader::open(cast_file)?;
-        println!("  {:?}: v{}, {}x{}",
+        println!(
+            "  {:?}: v{}, {}x{}",
             cast_file.file_name().unwrap(),
             reader.header().version,
             reader.header().width,
@@ -142,7 +140,7 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
         );
 
         let event_count = reader.events().count();
-        println!("    Events: {}", event_count);
+        println!("    Events: {event_count}");
         assert!(event_count > 0, "Should have captured some events");
     }
 
@@ -157,11 +155,7 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
         theme: None,
     };
 
-    let writer = CompositeWriter::new(
-        output_dir,
-        &output_path,
-        opts,
-    );
+    let writer = CompositeWriter::new(output_dir, &output_path, opts);
 
     let result = writer.run()?;
 
@@ -176,7 +170,8 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
 
     println!("\n=== Phase 6: Verify composite is valid ===");
     let composite_reader = CastReader::open(&output_path)?;
-    println!("Composite header: v{}, {}x{}",
+    println!(
+        "Composite header: v{}, {}x{}",
         composite_reader.header().version,
         composite_reader.header().width,
         composite_reader.header().height
@@ -184,17 +179,17 @@ async fn test_real_tmux_recording_and_rendering() -> anyhow::Result<()> {
 
     let composite_events: Vec<_> = composite_reader.events().collect();
     println!("Composite events: {}", composite_events.len());
-    assert!(composite_events.len() > 0, "Composite should have events");
+    assert!(!composite_events.is_empty(), "Composite should have events");
 
     println!("\n=== Phase 7: Cleanup ===");
     kill_tmux_session(session_name);
     // Keep output_dir for manual inspection
-    println!("Recording saved to: {}", output_dir);
-    println!("Composite: {:?}", output_path);
+    println!("Recording saved to: {output_dir}");
+    println!("Composite: {output_path:?}");
 
     println!("\n=== ✅ END-TO-END TEST PASSED ===");
     println!("You can play the recording with:");
-    println!("  asciinema play {:?}", output_path);
+    println!("  asciinema play {output_path:?}");
 
     Ok(())
 }

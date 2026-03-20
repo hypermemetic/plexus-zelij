@@ -1,7 +1,7 @@
 //! Terminal observation activation - efficient state queries for agents
 //!
 //! Provides in-memory terminal state access without file I/O.
-//! Integrates with the recording engine's TerminalStateManager.
+//! Integrates with the recording engine's `TerminalStateManager`.
 
 use async_stream::stream;
 use async_trait::async_trait;
@@ -12,21 +12,21 @@ use std::time::Duration;
 use crate::backend::TerminalBackend;
 use crate::observation::TerminalStateManager;
 use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
-use crate::types::*;
+use crate::types::{LocusEvent, PaneId};
 
 /// Observation activation - provides efficient terminal state queries
 #[derive(Clone)]
 pub struct ObservationActivation {
-    backend: Arc<dyn TerminalBackend>,
+    _backend: Arc<dyn TerminalBackend>,
     terminal_state: Arc<TerminalStateManager>,
 }
 
 impl ObservationActivation {
-    pub fn new(backend: Arc<dyn TerminalBackend>, terminal_state: Arc<TerminalStateManager>) -> Self {
-        Self {
-            backend,
-            terminal_state,
-        }
+    pub fn new(
+        backend: Arc<dyn TerminalBackend>,
+        terminal_state: Arc<TerminalStateManager>,
+    ) -> Self {
+        Self { _backend: backend, terminal_state }
     }
 }
 
@@ -40,10 +40,7 @@ impl ObservationActivation {
         description = "Get current screen contents from in-memory state (instant, no file I/O)",
         params(pane = "Pane ID (e.g. '%5')")
     )]
-    async fn get_screen(
-        &self,
-        pane: String,
-    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+    async fn get_screen(&self, pane: String) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let terminal_state = self.terminal_state.clone();
         stream! {
             match terminal_state.get_contents(&pane).await {
@@ -55,7 +52,7 @@ impl ObservationActivation {
                 }
                 None => {
                     yield LocusEvent::Error {
-                        message: format!("Pane {} not being tracked", pane),
+                        message: format!("Pane {pane} not being tracked"),
                     };
                 }
             }
@@ -66,10 +63,7 @@ impl ObservationActivation {
         description = "Get cursor position (row, col) - 0-indexed",
         params(pane = "Pane ID (e.g. '%5')")
     )]
-    async fn get_cursor(
-        &self,
-        pane: String,
-    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+    async fn get_cursor(&self, pane: String) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let terminal_state = self.terminal_state.clone();
         stream! {
             match terminal_state.get_cursor(&pane).await {
@@ -82,7 +76,7 @@ impl ObservationActivation {
                 }
                 None => {
                     yield LocusEvent::Error {
-                        message: format!("Pane {} not being tracked", pane),
+                        message: format!("Pane {pane} not being tracked"),
                     };
                 }
             }
@@ -115,7 +109,7 @@ impl ObservationActivation {
                 }
                 None => {
                     yield LocusEvent::Error {
-                        message: format!("Pane {} not being tracked", pane),
+                        message: format!("Pane {pane} not being tracked"),
                     };
                 }
             }
@@ -139,14 +133,11 @@ impl ObservationActivation {
             let timeout = Duration::from_millis(timeout_ms.unwrap_or(5000));
 
             // Subscribe to changes
-            let mut rx = match terminal_state.subscribe(&pane).await {
-                Some(rx) => rx,
-                None => {
-                    yield LocusEvent::Error {
-                        message: format!("Pane {} not being tracked", pane),
-                    };
-                    return;
-                }
+            let mut rx = if let Some(rx) = terminal_state.subscribe(&pane).await { rx } else {
+                yield LocusEvent::Error {
+                    message: format!("Pane {pane} not being tracked"),
+                };
+                return;
             };
 
             // Wait for next change or timeout
@@ -176,10 +167,7 @@ impl ObservationActivation {
 
     #[plexus_macros::hub_method(
         description = "Get changes since a specific sequence number (incremental fetching)",
-        params(
-            pane = "Pane ID (e.g. '%5')",
-            sequence = "Last known sequence number"
-        )
+        params(pane = "Pane ID (e.g. '%5')", sequence = "Last known sequence number")
     )]
     async fn get_changes_since(
         &self,
@@ -188,14 +176,11 @@ impl ObservationActivation {
     ) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let terminal_state = self.terminal_state.clone();
         stream! {
-            let current_seq = match terminal_state.get_sequence(&pane).await {
-                Some(seq) => seq,
-                None => {
-                    yield LocusEvent::Error {
-                        message: format!("Pane {} not being tracked", pane),
-                    };
-                    return;
-                }
+            let current_seq = if let Some(seq) = terminal_state.get_sequence(&pane).await { seq } else {
+                yield LocusEvent::Error {
+                    message: format!("Pane {pane} not being tracked"),
+                };
+                return;
             };
 
             if current_seq > sequence {
@@ -239,19 +224,15 @@ impl ObservationActivation {
                 }
                 None => {
                     yield LocusEvent::Error {
-                        message: format!("Pane {} not being tracked", pane),
+                        message: format!("Pane {pane} not being tracked"),
                     };
                 }
             }
         }
     }
 
-    #[plexus_macros::hub_method(
-        description = "List all panes being tracked in terminal state",
-    )]
-    async fn list_tracked(
-        &self,
-    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+    #[plexus_macros::hub_method(description = "List all panes being tracked in terminal state")]
+    async fn list_tracked(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let terminal_state = self.terminal_state.clone();
         stream! {
             let tracked = terminal_state.tracked_panes().await;
@@ -260,11 +241,9 @@ impl ObservationActivation {
     }
 
     #[plexus_macros::hub_method(
-        description = "Get info about all tracked panes (dimensions, sequence, last update)",
+        description = "Get info about all tracked panes (dimensions, sequence, last update)"
     )]
-    async fn get_all_info(
-        &self,
-    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+    async fn get_all_info(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let terminal_state = self.terminal_state.clone();
         stream! {
             let infos = terminal_state.get_all_info().await;
@@ -275,7 +254,7 @@ impl ObservationActivation {
 
 #[async_trait]
 impl ChildRouter for ObservationActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "observation"
     }
 

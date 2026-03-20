@@ -1,6 +1,6 @@
-//! Demonstration of CompositeWriter usage.
+//! Demonstration of `CompositeWriter` usage.
 //!
-//! This example shows how to use the CompositeWriter to create a composite .cast file
+//! This example shows how to use the `CompositeWriter` to create a composite .cast file
 //! from per-pane recordings.
 
 use plexus_locus::cast::{CastEvent, CastHeader, CastWriter};
@@ -18,8 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n1. Creating layout journal...");
     let layout_path = demo_dir.join("layout.jsonl");
 
-    let layout_events = vec![
-        serde_json::json!({
+    let layout_events = [serde_json::json!({
             "timestamp": 0.0,
             "event": "layout_snapshot",
             "panes": [{
@@ -49,8 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "y": 0,
             "width": 80,
             "height": 12
-        }),
-    ];
+        })];
 
     let layout_content = layout_events
         .iter()
@@ -139,7 +137,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let writer = CompositeWriter::new(&demo_dir, &output_path, opts).with_progress(|progress| {
         if progress == 1.0 {
             println!("   ✓ Compositing complete (100%)");
-        } else if (progress * 100.0) as u32 % 25 == 0 {
+        } else if ((progress * 100.0) as u32).is_multiple_of(25) {
             println!("   Processing... {:.0}%", progress * 100.0);
         }
     });
@@ -157,10 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nYou can play the composite recording with:");
     println!("  asciinema play {}", result.output_path.display());
     println!("\nOr convert to SVG:");
-    println!(
-        "  svg-term --in {} --out output.svg",
-        result.output_path.display()
-    );
+    println!("  svg-term --in {} --out output.svg", result.output_path.display());
 
     // Optional: Clean up
     println!("\nCleaning up demo files...");

@@ -4,15 +4,15 @@ use futures::Stream;
 use std::sync::Arc;
 
 use crate::backend::TerminalBackend;
-use crate::plexus::{ChildRouter, PlexusError, PlexusStream, Activation};
-use crate::types::*;
+use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
+use crate::types::{PaneRef, LocusEvent, Direction, PaneOpts, PaneId, RunOpts, Pane, SessionId, BatchEntry};
 
 /// Shell-escape a string for safe inclusion in a bash script
 fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// Resolve an optional PaneRef to a tmux %id, returning (resolved_id, target_for_backend)
+/// Resolve an optional `PaneRef` to a tmux %id, returning (`resolved_id`, `target_for_backend`)
 async fn resolve_pane_opt(
     backend: &std::sync::Arc<dyn crate::backend::TerminalBackend>,
     pane: &Option<PaneRef>,
@@ -22,14 +22,14 @@ async fn resolve_pane_opt(
             Ok(id) => {
                 let target = Some(id.clone());
                 Ok((id, target))
-            }
+            },
             Err(e) => Err(e.to_string()),
         },
         None => Ok(("focused".into(), None)),
     }
 }
 
-/// Resolve a required PaneRef
+/// Resolve a required `PaneRef`
 async fn resolve_pane_req(
     backend: &std::sync::Arc<dyn crate::backend::TerminalBackend>,
     pane: &PaneRef,
@@ -156,10 +156,7 @@ impl PanesActivation {
         description = "Move focus to an adjacent pane",
         params(direction = "Direction: up, down, left, right")
     )]
-    async fn focus(
-        &self,
-        direction: String,
-    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+    async fn focus(&self, direction: String) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
             let dir = match direction.as_str() {
@@ -168,12 +165,12 @@ impl PanesActivation {
                 "left" => Direction::Left,
                 "right" => Direction::Right,
                 _ => {
-                    yield LocusEvent::Error { message: format!("Invalid direction: {}", direction) };
+                    yield LocusEvent::Error { message: format!("Invalid direction: {direction}") };
                     return;
                 }
             };
             match backend.focus_pane(dir).await {
-                Ok(()) => yield LocusEvent::Ok { message: format!("Focused {}", direction) },
+                Ok(()) => yield LocusEvent::Ok { message: format!("Focused {direction}") },
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }
@@ -197,15 +194,13 @@ impl PanesActivation {
                 Ok(v) => v, Err(e) => { yield LocusEvent::Error { message: e }; return; }
             };
             match backend.rename_pane(&name, target.as_deref()).await {
-                Ok(()) => yield LocusEvent::Ok { message: format!("Renamed pane to {}", name) },
+                Ok(()) => yield LocusEvent::Ok { message: format!("Renamed pane to {name}") },
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }
     }
 
-    #[plexus_macros::hub_method(
-        description = "Toggle floating panes visibility (zellij only)"
-    )]
+    #[plexus_macros::hub_method(description = "Toggle floating panes visibility (zellij only)")]
     async fn toggle_floating(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
@@ -216,9 +211,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
-        description = "Toggle fullscreen/zoom for a pane"
-    )]
+    #[plexus_macros::hub_method(description = "Toggle fullscreen/zoom for a pane")]
     async fn toggle_fullscreen(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
@@ -251,7 +244,7 @@ impl PanesActivation {
                 "left" => Direction::Left,
                 "right" => Direction::Right,
                 _ => {
-                    yield LocusEvent::Error { message: format!("Invalid direction: {}", direction) };
+                    yield LocusEvent::Error { message: format!("Invalid direction: {direction}") };
                     return;
                 }
             };
@@ -259,7 +252,7 @@ impl PanesActivation {
                 Ok(v) => v, Err(e) => { yield LocusEvent::Error { message: e }; return; }
             };
             match backend.resize_pane(dir, amount, target.as_deref()).await {
-                Ok(()) => yield LocusEvent::Ok { message: format!("Resized pane {}", direction) },
+                Ok(()) => yield LocusEvent::Ok { message: format!("Resized pane {direction}") },
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }
@@ -482,14 +475,14 @@ impl PanesActivation {
             let exec_id = uuid::Uuid::new_v4();
             // Pane IDs start with % — strip it for filename safety
             let safe_pane = pane_id.replace('%', "pane_");
-            let state_file = format!("{}/{}", state_dir, safe_pane);
+            let state_file = format!("{state_dir}/{safe_pane}");
 
             // Build the wrapper script:
             // 1. Writes "started" to state file (shell hook: preexec equivalent)
             // 2. Runs the user command
             // 3. Writes "exited:<exit_code>" to state file (shell hook: precmd equivalent)
             // 4. Cleans up
-            let script_path = format!("/tmp/plexus_locus_exec_script_{}.sh", exec_id);
+            let script_path = format!("/tmp/plexus_locus_exec_script_{exec_id}.sh");
             let mut script = String::new();
             script.push_str("#!/bin/bash\n");
             script.push_str(&format!(
@@ -520,7 +513,7 @@ impl PanesActivation {
             script.push_str("exit $__PLEXUS_LOCUS_EXEC_EXIT_CODE\n");
 
             if let Err(e) = tokio::fs::write(&script_path, &script).await {
-                yield LocusEvent::Error { message: format!("Failed to write exec script: {}", e) };
+                yield LocusEvent::Error { message: format!("Failed to write exec script: {e}") };
                 return;
             }
 
@@ -543,17 +536,13 @@ impl PanesActivation {
                 let state_line = content.lines().next()?.trim().to_string();
                 if state_line == "started" {
                     Some(("started".into(), None))
-                } else if let Some(code_str) = state_line.strip_prefix("exited:") {
-                    Some(("exited".into(), code_str.parse().ok()))
-                } else {
-                    None
-                }
+                } else { state_line.strip_prefix("exited:").map(|code_str| ("exited".into(), code_str.parse().ok())) }
             };
 
             // Helper: capture screen tail
             let do_capture = |backend: &Arc<dyn TerminalBackend>, pane_target: Option<&str>, count: u32| {
                 let backend = backend.clone();
-                let pane_target = pane_target.map(|s| s.to_string());
+                let pane_target = pane_target.map(std::string::ToString::to_string);
                 async move {
                     let tmp = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
                     match backend.dump_screen(&tmp, false, pane_target.as_deref()).await {
@@ -589,7 +578,7 @@ impl PanesActivation {
                 }
 
                 // Check pane still exists every ~500ms
-                if poll_count % 25 == 0 && !backend.pane_exists(&pane_id).await {
+                if poll_count.is_multiple_of(25) && !backend.pane_exists(&pane_id).await {
                     pane_gone = true;
                     break;
                 }
@@ -597,14 +586,14 @@ impl PanesActivation {
 
             if pane_gone {
                 yield LocusEvent::Error {
-                    message: format!("Pane {} was destroyed before command started", pane_id),
+                    message: format!("Pane {pane_id} was destroyed before command started"),
                 };
                 return;
             }
 
             if !started {
                 yield LocusEvent::Error {
-                    message: format!("Timed out waiting for command to start in pane {}", pane_id),
+                    message: format!("Timed out waiting for command to start in pane {pane_id}"),
                 };
                 return;
             }
@@ -641,7 +630,7 @@ impl PanesActivation {
                     // Check pane still alive
                     if !backend.pane_exists(&pane_id).await {
                         yield LocusEvent::Error {
-                            message: format!("Pane {} was destroyed while command was running", pane_id),
+                            message: format!("Pane {pane_id} was destroyed while command was running"),
                         };
                         return;
                     }
@@ -681,16 +670,13 @@ impl PanesActivation {
                 Ok(v) => v, Err(e) => { yield LocusEvent::Error { message: e }; return; }
             };
             let safe_pane = pane_id.replace('%', "pane_");
-            let state_file = format!("/tmp/plexus_locus_exec_state/{}", safe_pane);
+            let state_file = format!("/tmp/plexus_locus_exec_state/{safe_pane}");
 
-            let content = match tokio::fs::read_to_string(&state_file).await {
-                Ok(c) => c,
-                Err(_) => {
-                    yield LocusEvent::Error {
-                        message: format!("No exec state for pane {}", pane),
-                    };
-                    return;
-                }
+            let content = if let Ok(c) = tokio::fs::read_to_string(&state_file).await { c } else {
+                yield LocusEvent::Error {
+                    message: format!("No exec state for pane {pane}"),
+                };
+                return;
             };
 
             let mut lines_iter = content.lines();
@@ -732,7 +718,7 @@ impl PanesActivation {
                 };
             } else {
                 yield LocusEvent::Error {
-                    message: format!("Unknown exec state for pane {}: {}", pane_id, state_line),
+                    message: format!("Unknown exec state for pane {pane_id}: {state_line}"),
                 };
             }
         }
@@ -823,13 +809,13 @@ impl PanesActivation {
             let tab_opts = crate::types::TabOpts {
                 name: tab.clone(),
                 layout: None,
-                cwd: cwd.as_ref().map(|s| s.into()),
+                cwd: cwd.as_ref().map(std::convert::Into::into),
                 session: None,
             };
             let tab_result = match backend.create_tab(&tab_opts).await {
                 Ok(t) => t,
                 Err(e) => {
-                    yield LocusEvent::Error { message: format!("Failed to create tab: {}", e) };
+                    yield LocusEvent::Error { message: format!("Failed to create tab: {e}") };
                     return;
                 }
             };
@@ -838,12 +824,9 @@ impl PanesActivation {
             // Find the initial pane in the new tab
             let initial_pane = match backend.list_panes(None, None).await {
                 Ok(panes) => {
-                    match panes.iter().find(|p| p.tab == tab_id) {
-                        Some(p) => p.id.0.clone(),
-                        None => {
-                            yield LocusEvent::Error { message: "Could not find initial pane in new tab".into() };
-                            return;
-                        }
+                    if let Some(p) = panes.iter().find(|p| p.tab == tab_id) { p.id.0.clone() } else {
+                        yield LocusEvent::Error { message: "Could not find initial pane in new tab".into() };
+                        return;
                     }
                 }
                 Err(e) => {
@@ -861,13 +844,13 @@ impl PanesActivation {
                 let opts = PaneOpts {
                     direction: Some(Direction::Down),
                     target: Some(target.clone()),
-                    cwd: cwd.as_ref().map(|s| s.into()),
+                    cwd: cwd.as_ref().map(std::convert::Into::into),
                     ..Default::default()
                 };
                 match backend.create_pane(&opts).await {
                     Ok(p) => left_column.push(p.id.0.clone()),
                     Err(e) => {
-                        yield LocusEvent::Error { message: format!("Failed to create row {}: {}", i, e) };
+                        yield LocusEvent::Error { message: format!("Failed to create row {i}: {e}") };
                         return;
                     }
                 }
@@ -883,13 +866,13 @@ impl PanesActivation {
                     let opts = PaneOpts {
                         direction: Some(Direction::Right),
                         target: Some(target.clone()),
-                        cwd: cwd.as_ref().map(|s| s.into()),
+                        cwd: cwd.as_ref().map(std::convert::Into::into),
                         ..Default::default()
                     };
                     match backend.create_pane(&opts).await {
                         Ok(p) => row_panes.push(p.id.0.clone()),
                         Err(e) => {
-                            yield LocusEvent::Error { message: format!("Failed to create pane [{},{}]: {}", row_idx, col_idx, e) };
+                            yield LocusEvent::Error { message: format!("Failed to create pane [{row_idx},{col_idx}]: {e}") };
                             return;
                         }
                     }
@@ -923,7 +906,7 @@ impl PanesActivation {
                     id: PaneId(id.clone()),
                     name: pane_names.get(i).cloned(),
                     command: cmds.get(i).cloned(),
-                    cwd: cwd.as_ref().map(|s| s.into()),
+                    cwd: cwd.as_ref().map(std::convert::Into::into),
                     floating: false,
                     focused: row == 0 && col == 0,
                     tab: tab_id.clone(),
@@ -985,7 +968,7 @@ impl PanesActivation {
                 let before = {
                     let tmp = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
                     backend.dump_screen(&tmp, false, target).await
-                        .map(|c| { let _ = std::fs::remove_file(&tmp); c })
+                        .inspect(|_c| { let _ = std::fs::remove_file(&tmp); })
                         .unwrap_or_default()
                 };
 
@@ -1017,7 +1000,7 @@ impl PanesActivation {
                     let current = {
                         let tmp = format!("/tmp/locus-capture-{}", uuid::Uuid::new_v4());
                         backend.dump_screen(&tmp, false, target).await
-                            .map(|c| { let _ = std::fs::remove_file(&tmp); c })
+                            .inspect(|_c| { let _ = std::fs::remove_file(&tmp); })
                             .unwrap_or_default()
                     };
 
@@ -1058,11 +1041,15 @@ impl PanesActivation {
 
 #[async_trait]
 impl ChildRouter for PanesActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "panes"
     }
 
-    async fn router_call(&self, method: &str, params: serde_json::Value) -> Result<PlexusStream, PlexusError> {
+    async fn router_call(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<PlexusStream, PlexusError> {
         Activation::call(self, method, params).await
     }
 

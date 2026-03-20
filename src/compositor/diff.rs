@@ -44,7 +44,7 @@ impl StyleState {
 
         if needs_reset {
             sgr_params.push("0".to_string());
-            *self = StyleState::default();
+            *self = Self::default();
         }
 
         // Set attributes
@@ -304,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_diff_frames_full_row_change() {
-        let mut frame1 = CompositeFrame::new(5, 3);
+        let frame1 = CompositeFrame::new(5, 3);
         // Leave row 1 as all spaces
 
         let mut frame2 = CompositeFrame::new(5, 3);
@@ -524,7 +524,7 @@ mod tests {
         assert!(sgr.contains("31"));
 
         // State should be updated
-        assert_eq!(state.bold, true);
+        assert!(state.bold);
         assert_eq!(state.fg, Color::Indexed(1));
 
         // Transitioning to same state should produce no output

@@ -1,9 +1,9 @@
 //! Live demo - sends commands while recording
 //!
-//! Run with: cargo test --test live_demo_recording -- --ignored --nocapture
+//! Run with: cargo test --test `live_demo_recording` -- --ignored --nocapture
 
-use plexus_locus::recording::{RecordingSession, LayoutJournal};
-use plexus_locus::compositor::{CompositeWriter, CompositeOpts, BorderStyle};
+use plexus_locus::compositor::{BorderStyle, CompositeOpts, CompositeWriter};
+use plexus_locus::recording::{LayoutJournal, RecordingSession};
 use std::process::Command;
 use std::time::Instant;
 use tokio::time::{sleep, Duration};
@@ -15,7 +15,7 @@ async fn live_demo_with_commands() -> anyhow::Result<()> {
     let output_dir = "/tmp/live-demo";
 
     // Cleanup
-    Command::new("tmux").args(&["kill-session", "-t", session_name]).status().ok();
+    Command::new("tmux").args(["kill-session", "-t", session_name]).status().ok();
     let _ = std::fs::remove_dir_all(output_dir);
     std::fs::create_dir_all(output_dir)?;
 
@@ -23,11 +23,11 @@ async fn live_demo_with_commands() -> anyhow::Result<()> {
 
     // Create tmux session with 2 panes
     Command::new("tmux")
-        .args(&["new-session", "-d", "-s", session_name, "-x", "100", "-y", "30"])
+        .args(["new-session", "-d", "-s", session_name, "-x", "100", "-y", "30"])
         .status()?;
 
     Command::new("tmux")
-        .args(&["split-window", "-h", "-t", session_name])
+        .args(["split-window", "-h", "-t", session_name])
         .status()?;
 
     println!("✅ Created session with 2 panes");
@@ -45,39 +45,57 @@ async fn live_demo_with_commands() -> anyhow::Result<()> {
 
     println!("📝 Sending commands to left pane...");
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.0", session_name),
-                "echo '=== LEFT PANE ===='", "C-m"])
+        .args([
+            "send-keys",
+            "-t",
+            &format!("{session_name}:0.0"),
+            "echo '=== LEFT PANE ===='",
+            "C-m",
+        ])
         .status()?;
     sleep(Duration::from_millis(300)).await;
 
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.0", session_name),
-                "date", "C-m"])
+        .args(["send-keys", "-t", &format!("{session_name}:0.0"), "date", "C-m"])
         .status()?;
     sleep(Duration::from_millis(300)).await;
 
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.0", session_name),
-                "echo 'Multi-pane recording demo'", "C-m"])
+        .args([
+            "send-keys",
+            "-t",
+            &format!("{session_name}:0.0"),
+            "echo 'Multi-pane recording demo'",
+            "C-m",
+        ])
         .status()?;
     sleep(Duration::from_millis(500)).await;
 
     println!("📝 Sending commands to right pane...");
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.1", session_name),
-                "echo '=== RIGHT PANE ===='", "C-m"])
+        .args([
+            "send-keys",
+            "-t",
+            &format!("{session_name}:0.1"),
+            "echo '=== RIGHT PANE ===='",
+            "C-m",
+        ])
         .status()?;
     sleep(Duration::from_millis(300)).await;
 
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.1", session_name),
-                "ls -lh /workspace/plexus-zelij/src/ | head -10", "C-m"])
+        .args([
+            "send-keys",
+            "-t",
+            &format!("{session_name}:0.1"),
+            "ls -lh /workspace/plexus-zelij/src/ | head -10",
+            "C-m",
+        ])
         .status()?;
     sleep(Duration::from_millis(500)).await;
 
     Command::new("tmux")
-        .args(&["send-keys", "-t", &format!("{}:0.1", session_name),
-                "echo 'Done!'", "C-m"])
+        .args(["send-keys", "-t", &format!("{session_name}:0.1"), "echo 'Done!'", "C-m"])
         .status()?;
     sleep(Duration::from_millis(500)).await;
 
@@ -91,8 +109,7 @@ async fn live_demo_with_commands() -> anyhow::Result<()> {
         let size = std::fs::metadata(path)?.len();
         let contents = std::fs::read_to_string(path)?;
         let event_count = contents.lines().count() - 1; // subtract header
-        println!("  - {:?}: {} bytes, {} events",
-            path.file_name().unwrap(), size, event_count);
+        println!("  - {:?}: {} bytes, {} events", path.file_name().unwrap(), size, event_count);
     }
 
     // Render composite
@@ -130,7 +147,7 @@ async fn live_demo_with_commands() -> anyhow::Result<()> {
     println!("\n✨ Play with: asciinema play {:?}", result.output_path);
 
     // Cleanup
-    Command::new("tmux").args(&["kill-session", "-t", session_name]).status().ok();
+    Command::new("tmux").args(["kill-session", "-t", session_name]).status().ok();
 
     Ok(())
 }

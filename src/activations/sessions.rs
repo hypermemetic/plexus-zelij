@@ -4,8 +4,8 @@ use futures::Stream;
 use std::sync::Arc;
 
 use crate::backend::TerminalBackend;
-use crate::plexus::{ChildRouter, PlexusError, PlexusStream, Activation};
-use crate::types::*;
+use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
+use crate::types::{LocusEvent, SessionOpts};
 
 /// Sessions sub-activation — manages terminal sessions.
 ///
@@ -27,9 +27,7 @@ impl SessionsActivation {
     description = "Terminal session management"
 )]
 impl SessionsActivation {
-    #[plexus_macros::hub_method(
-        description = "List all terminal sessions"
-    )]
+    #[plexus_macros::hub_method(description = "List all terminal sessions")]
     async fn list(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
@@ -72,14 +70,11 @@ impl SessionsActivation {
         description = "Kill a terminal session",
         params(name = "Session name to kill")
     )]
-    async fn kill(
-        &self,
-        name: String,
-    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+    async fn kill(&self, name: String) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
             match backend.kill_session(&name).await {
-                Ok(()) => yield LocusEvent::Ok { message: format!("Killed session: {}", name) },
+                Ok(()) => yield LocusEvent::Ok { message: format!("Killed session: {name}") },
                 Err(e) => yield LocusEvent::Error { message: e.to_string() },
             }
         }
@@ -88,11 +83,15 @@ impl SessionsActivation {
 
 #[async_trait]
 impl ChildRouter for SessionsActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "sessions"
     }
 
-    async fn router_call(&self, method: &str, params: serde_json::Value) -> Result<PlexusStream, PlexusError> {
+    async fn router_call(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<PlexusStream, PlexusError> {
         Activation::call(self, method, params).await
     }
 

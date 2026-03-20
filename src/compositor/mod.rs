@@ -51,7 +51,7 @@ pub enum CompositorError {
 pub type Result<T> = std::result::Result<T, CompositorError>;
 
 /// Pane geometry information.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PaneGeometry {
     pub pane_id: String,
     pub x: u16,
@@ -109,9 +109,7 @@ impl LayoutJournalReader {
             let entry: serde_json::Value = serde_json::from_str(&line)?;
 
             // Extract timestamp and event
-            let timestamp = entry.get("timestamp")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
+            let timestamp = entry.get("timestamp").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
 
             let event: LayoutEvent = serde_json::from_value(entry)?;
 
@@ -148,20 +146,23 @@ impl LayoutJournalReader {
                     for pane in panes {
                         layout.insert(pane.pane_id.clone(), pane.clone());
                     }
-                }
+                },
                 LayoutEvent::PaneOpened { pane_id, x, y, width, height, tab_index } => {
-                    layout.insert(pane_id.clone(), PaneGeometry {
-                        pane_id: pane_id.clone(),
-                        x: *x,
-                        y: *y,
-                        width: *width,
-                        height: *height,
-                        tab_index: *tab_index,
-                    });
-                }
+                    layout.insert(
+                        pane_id.clone(),
+                        PaneGeometry {
+                            pane_id: pane_id.clone(),
+                            x: *x,
+                            y: *y,
+                            width: *width,
+                            height: *height,
+                            tab_index: *tab_index,
+                        },
+                    );
+                },
                 LayoutEvent::PaneClosed { pane_id } => {
                     layout.remove(pane_id);
-                }
+                },
                 LayoutEvent::PaneResized { pane_id, x, y, width, height } => {
                     if let Some(pane) = layout.get_mut(pane_id) {
                         pane.x = *x;
@@ -169,11 +170,11 @@ impl LayoutJournalReader {
                         pane.width = *width;
                         pane.height = *height;
                     }
-                }
+                },
                 LayoutEvent::TabSwitched { .. } => {
                     // Tab switching affects visibility but not geometry
                     // For now we ignore this - a full implementation would track active tab
-                }
+                },
             }
         }
 
@@ -210,9 +211,10 @@ impl Compositor {
 
         // Check that directory exists
         if !recording_dir.is_dir() {
-            return Err(CompositorError::InvalidDirectory(
-                format!("{} is not a directory", recording_dir.display())
-            ));
+            return Err(CompositorError::InvalidDirectory(format!(
+                "{} is not a directory",
+                recording_dir.display()
+            )));
         }
 
         // Load layout journal
@@ -242,12 +244,14 @@ impl Compositor {
             return Err(CompositorError::NoCastFiles);
         }
 
-        Ok(Self {
-            recording_dir,
-            layout_reader,
-            pane_states: HashMap::new(),
-            timeline: Vec::new(),
-        })
+        Ok(
+            Self {
+                recording_dir,
+                layout_reader,
+                pane_states: HashMap::new(),
+                timeline: Vec::new(),
+            },
+        )
     }
 
     /// Build the merged timeline from all .cast files and layout events.
@@ -259,10 +263,7 @@ impl Compositor {
 
         // Add layout events
         for (time, event) in self.layout_reader.events() {
-            timeline.push((
-                *time,
-                TimelineEvent::LayoutChange { event: event.clone() },
-            ));
+            timeline.push((*time, TimelineEvent::LayoutChange { event: event.clone() }));
         }
 
         // Add pane output events from each .cast file
@@ -279,7 +280,7 @@ impl Compositor {
                             .and_then(|s| s.strip_suffix(".cast"))
                             .unwrap_or("");
 
-                        let pane_id = format!("%{}", pane_id_num);
+                        let pane_id = format!("%{pane_id_num}");
 
                         // Read events from this cast file
                         let reader = CastReader::open(&path)?;
@@ -296,7 +297,7 @@ impl Compositor {
                                             bytes: data.into_bytes(),
                                         },
                                     ));
-                                }
+                                },
                                 CastEvent::Resize(time, width, height) => {
                                     // Handle resize by creating a layout event
                                     // Note: we don't have x,y here, so this is a simplified version
@@ -313,10 +314,10 @@ impl Compositor {
                                             },
                                         },
                                     ));
-                                }
+                                },
                                 _ => {
                                     // Ignore input and marker events for now
-                                }
+                                },
                             }
                         }
                     }
@@ -350,11 +351,7 @@ impl Compositor {
             if !self.pane_states.contains_key(&pane_geo.pane_id) {
                 self.pane_states.insert(
                     pane_geo.pane_id.clone(),
-                    PaneState::new(
-                        pane_geo.pane_id.clone(),
-                        pane_geo.width,
-                        pane_geo.height,
-                    ),
+                    PaneState::new(pane_geo.pane_id.clone(), pane_geo.width, pane_geo.height),
                 );
             }
         }
@@ -370,19 +367,16 @@ impl Compositor {
                     if let Some(state) = self.pane_states.get_mut(pane_id) {
                         state.process(bytes);
                     }
-                }
+                },
                 TimelineEvent::LayoutChange { event } => {
-                    match event {
-                        LayoutEvent::PaneResized { pane_id, width, height, .. } => {
-                            if let Some(state) = self.pane_states.get_mut(pane_id) {
-                                state.resize(*width, *height);
-                            }
+                    if let LayoutEvent::PaneResized { pane_id, width, height, .. } = event {
+                        if let Some(state) = self.pane_states.get_mut(pane_id) {
+                            state.resize(*width, *height);
                         }
-                        _ => {
-                            // Other layout events don't affect pane state
-                        }
+                    } else {
+                        // Other layout events don't affect pane state
                     }
-                }
+                },
             }
         }
 
@@ -596,8 +590,7 @@ mod tests {
         let path = temp_dir.join("test_layout_lifecycle.jsonl");
 
         // Write multiple events
-        let events = vec![
-            serde_json::json!({
+        let events = [serde_json::json!({
                 "timestamp": 0.0,
                 "event": "layout_snapshot",
                 "panes": [{
@@ -632,8 +625,7 @@ mod tests {
                 "timestamp": 3.0,
                 "event": "pane_closed",
                 "pane_id": "%2"
-            }),
-        ];
+            })];
 
         let content = events
             .iter()
@@ -751,8 +743,12 @@ mod tests {
         };
 
         writer.write_header(&header).unwrap();
-        writer.write_event(&CastEvent::Output(0.1, "Hello, World!\n".to_string())).unwrap();
-        writer.write_event(&CastEvent::Output(0.5, "This is a test.\n".to_string())).unwrap();
+        writer
+            .write_event(&CastEvent::Output(0.1, "Hello, World!\n".to_string()))
+            .unwrap();
+        writer
+            .write_event(&CastEvent::Output(0.5, "This is a test.\n".to_string()))
+            .unwrap();
         writer.finish().unwrap();
 
         // Create compositor
@@ -777,7 +773,7 @@ mod tests {
         let frame = compositor.render_frame(1.0).unwrap();
         let ansi = frame.render_ansi();
         // Should contain both lines
-        assert!(ansi.len() > 0);
+        assert!(!ansi.is_empty());
 
         // Cleanup
         std::fs::remove_dir_all(&temp_dir).ok();
@@ -818,32 +814,36 @@ mod tests {
         // Create pane-1.cast
         let cast_path1 = temp_dir.join("pane-1.cast");
         let mut writer1 = CastWriter::create(&cast_path1).unwrap();
-        writer1.write_header(&CastHeader {
-            version: 2,
-            width: 20,
-            height: 10,
-            timestamp: Some(1234567890),
-            env: None,
-            title: Some("Pane 1".to_string()),
-            idle_time_limit: None,
-            theme: None,
-        }).unwrap();
+        writer1
+            .write_header(&CastHeader {
+                version: 2,
+                width: 20,
+                height: 10,
+                timestamp: Some(1234567890),
+                env: None,
+                title: Some("Pane 1".to_string()),
+                idle_time_limit: None,
+                theme: None,
+            })
+            .unwrap();
         writer1.write_event(&CastEvent::Output(0.1, "Left Pane".to_string())).unwrap();
         writer1.finish().unwrap();
 
         // Create pane-2.cast
         let cast_path2 = temp_dir.join("pane-2.cast");
         let mut writer2 = CastWriter::create(&cast_path2).unwrap();
-        writer2.write_header(&CastHeader {
-            version: 2,
-            width: 20,
-            height: 10,
-            timestamp: Some(1234567890),
-            env: None,
-            title: Some("Pane 2".to_string()),
-            idle_time_limit: None,
-            theme: None,
-        }).unwrap();
+        writer2
+            .write_header(&CastHeader {
+                version: 2,
+                width: 20,
+                height: 10,
+                timestamp: Some(1234567890),
+                env: None,
+                title: Some("Pane 2".to_string()),
+                idle_time_limit: None,
+                theme: None,
+            })
+            .unwrap();
         writer2.write_event(&CastEvent::Output(0.2, "Right Pane".to_string())).unwrap();
         writer2.finish().unwrap();
 

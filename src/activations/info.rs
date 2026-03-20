@@ -4,8 +4,8 @@ use futures::Stream;
 use std::sync::Arc;
 
 use crate::backend::TerminalBackend;
-use crate::plexus::{ChildRouter, PlexusError, PlexusStream, Activation};
-use crate::types::*;
+use crate::plexus::{Activation, ChildRouter, PlexusError, PlexusStream};
+use crate::types::LocusEvent;
 
 /// Info sub-activation — backend status and layout queries.
 ///
@@ -36,16 +36,14 @@ impl InfoActivation {
             let available = backend.is_available().await;
             let name = backend.name().to_string();
             if available {
-                yield LocusEvent::Ok { message: format!("Backend '{}' is available", name) };
+                yield LocusEvent::Ok { message: format!("Backend '{name}' is available") };
             } else {
-                yield LocusEvent::Error { message: format!("Backend '{}' is not available", name) };
+                yield LocusEvent::Error { message: format!("Backend '{name}' is not available") };
             }
         }
     }
 
-    #[plexus_macros::hub_method(
-        description = "Dump the current layout definition"
-    )]
+    #[plexus_macros::hub_method(description = "Dump the current layout definition")]
     async fn layout(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
@@ -59,11 +57,15 @@ impl InfoActivation {
 
 #[async_trait]
 impl ChildRouter for InfoActivation {
-    fn router_namespace(&self) -> &str {
+    fn router_namespace(&self) -> &'static str {
         "info"
     }
 
-    async fn router_call(&self, method: &str, params: serde_json::Value) -> Result<PlexusStream, PlexusError> {
+    async fn router_call(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<PlexusStream, PlexusError> {
         Activation::call(self, method, params).await
     }
 

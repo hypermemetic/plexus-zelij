@@ -8,7 +8,5 @@ pub mod layout;
 pub mod lifecycle;
 
 pub use engine::{PaneRecorder, RecordingError, RecordingSession, Result};
-pub use layout::{
-    LayoutError, LayoutEvent, LayoutJournal, LayoutJournalReader, PaneGeometry,
-};
+pub use layout::{LayoutError, LayoutEvent, LayoutJournal, LayoutJournalReader, PaneGeometry};
 pub use lifecycle::{LifecycleConfig, LifecycleMonitor};
