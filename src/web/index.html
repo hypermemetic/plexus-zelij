@@ -342,6 +342,7 @@
         let currentTmuxPanes = new Set();
         let lastTabStructure = null; // Track tab structure to avoid unnecessary re-renders
         let sessionsData = {}; // Store sessions data globally
+        let isRenderingPanes = false; // Prevent concurrent pane renders
 
         // View switcher
         document.querySelectorAll('.view-btn').forEach(btn => {
@@ -690,11 +691,21 @@
 
                     // Add click handler to entire tab div
                     tab.addEventListener('click', async () => {
+                        // Check if we're switching to a different tab
+                        const switchingTabs = currentSession !== sessionName || currentTab !== tabKey;
+
                         currentSession = sessionName;
                         currentTab = tabKey;
 
                         // Update active state immediately
                         updateTabActiveState();
+
+                        // If switching tabs, clear existing panes first to avoid state conflicts
+                        if (switchingTabs) {
+                            const container = document.getElementById('tmux-panes');
+                            container.innerHTML = '';
+                            currentTmuxPanes.clear();
+                        }
 
                         // Render panes for this tab
                         if (sessionsData[sessionName] && sessionsData[sessionName][tabKey]) {
@@ -739,8 +750,15 @@
         }
 
         async function renderTmuxPanes(panes) {
-            const container = document.getElementById('tmux-panes');
-            const newPaneIds = new Set(panes.map(p => p.id));
+            // Prevent concurrent renders which can cause state conflicts
+            if (isRenderingPanes) {
+                return;
+            }
+            isRenderingPanes = true;
+
+            try {
+                const container = document.getElementById('tmux-panes');
+                const newPaneIds = new Set(panes.map(p => p.id));
 
             // Calculate layout (simple grid for now)
             const containerWidth = container.clientWidth;
@@ -824,6 +842,9 @@
                         }
                     }
                 }
+            }
+            } finally {
+                isRenderingPanes = false;
             }
         }
 
