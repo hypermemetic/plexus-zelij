@@ -40,12 +40,12 @@ impl TmuxBackend {
         }
     }
 
-    /// Parse tab-separated tmux format output into rows of fields
+    /// Parse space-separated tmux format output into rows of fields
     fn parse_format_output(output: &str) -> Vec<Vec<&str>> {
         output
             .lines()
             .filter(|line| !line.is_empty())
-            .map(|line| line.split('\t').collect())
+            .map(|line| line.split_whitespace().collect())
             .collect()
     }
 }
@@ -76,7 +76,7 @@ impl TerminalBackend for TmuxBackend {
     // ========================================================================
 
     async fn list_sessions(&self) -> BackendResult<Vec<Session>> {
-        let format = "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}";
+        let format = "#{session_id} #{session_name} #{session_windows} #{session_attached}";
         let output = self.exec(&["list-sessions", "-F", format]).await?;
 
         Ok(Self::parse_format_output(&output)
@@ -128,7 +128,7 @@ impl TerminalBackend for TmuxBackend {
     // ========================================================================
 
     async fn list_tabs(&self, session: Option<&str>) -> BackendResult<Vec<Tab>> {
-        let format = "#{window_id}\t#{window_name}\t#{window_index}\t#{window_panes}\t#{window_active}\t#{session_name}";
+        let format = "#{window_id} #{window_name} #{window_index} #{window_panes} #{window_active} #{session_name}";
         let mut args = vec!["list-windows", "-F", format];
 
         let target;
@@ -161,7 +161,7 @@ impl TerminalBackend for TmuxBackend {
 
     async fn create_tab(&self, opts: &TabOpts) -> BackendResult<Tab> {
         // -d: don't switch to the new window
-        let mut args = vec!["new-window", "-d", "-P", "-F", "#{window_id}\t#{window_index}"];
+        let mut args = vec!["new-window", "-d", "-P", "-F", "#{window_id} #{window_index}"];
 
         let target;
         if let Some(ref s) = opts.session {
@@ -185,7 +185,7 @@ impl TerminalBackend for TmuxBackend {
         }
 
         let output = self.exec(&args).await?;
-        let parts: Vec<&str> = output.trim().split('\t').collect();
+        let parts: Vec<&str> = output.trim().split_whitespace().collect();
 
         let session_id = SessionId(opts.session.clone().unwrap_or_else(|| "current".into()));
         Ok(Tab {
@@ -233,7 +233,7 @@ impl TerminalBackend for TmuxBackend {
     // ========================================================================
 
     async fn list_panes(&self, session: Option<&str>, _tab: Option<&str>) -> BackendResult<Vec<Pane>> {
-        let format = "#{pane_id}\t#{pane_title}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_active}\t#{window_id}\t#{window_index}\t#{session_name}";
+        let format = "#{pane_id} #{pane_title} #{pane_current_command} #{pane_current_path} #{pane_active} #{window_id} #{window_index} #{session_name}";
         let mut args = vec!["list-panes", "-F", format];
 
         // -s lists all panes in session, -a lists all panes across all sessions
@@ -276,7 +276,7 @@ impl TerminalBackend for TmuxBackend {
 
     async fn create_pane(&self, opts: &PaneOpts) -> BackendResult<Pane> {
         // -d: don't switch focus to the new pane
-        let mut args = vec!["split-window", "-d", "-P", "-F", "#{pane_id}\t#{window_id}\t#{session_name}"];
+        let mut args = vec!["split-window", "-d", "-P", "-F", "#{pane_id} #{window_id} #{session_name}"];
 
         // Direction: -h for horizontal split (left/right), default is vertical (up/down)
         match opts.direction {
@@ -310,7 +310,7 @@ impl TerminalBackend for TmuxBackend {
         }
 
         let output = self.exec(&args).await?;
-        let parts: Vec<&str> = output.trim().split('\t').collect();
+        let parts: Vec<&str> = output.trim().split_whitespace().collect();
 
         let pane_id_str = parts.first().unwrap_or(&"").to_string();
         let tab_id = TabId(parts.get(1).unwrap_or(&"current").to_string());
@@ -459,7 +459,7 @@ impl TerminalBackend for TmuxBackend {
     }
 
     async fn dump_layout(&self) -> BackendResult<String> {
-        let format = "#{window_index}\t#{window_name}\t#{window_layout}";
+        let format = "#{window_index} #{window_name} #{window_layout}";
         self.exec(&["list-windows", "-F", format]).await
     }
 
@@ -470,7 +470,7 @@ impl TerminalBackend for TmuxBackend {
     async fn run_command(&self, opts: &RunOpts) -> BackendResult<Pane> {
         // split-window with command: splits and runs in one step
         // -d: don't steal focus from the current pane
-        let mut args = vec!["split-window", "-d", "-P", "-F", "#{pane_id}\t#{window_id}\t#{session_name}"];
+        let mut args = vec!["split-window", "-d", "-P", "-F", "#{pane_id} #{window_id} #{session_name}"];
 
         match opts.direction {
             Some(Direction::Left) | Some(Direction::Right) => args.push("-h"),
@@ -504,7 +504,7 @@ impl TerminalBackend for TmuxBackend {
         args.push(&opts.command);
 
         let output = self.exec(&args).await?;
-        let parts: Vec<&str> = output.trim().split('\t').collect();
+        let parts: Vec<&str> = output.trim().split_whitespace().collect();
 
         let pane_id = PaneId(parts.first().unwrap_or(&"").to_string());
         let tab_id = TabId(parts.get(1).unwrap_or(&"current").to_string());

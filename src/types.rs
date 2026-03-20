@@ -281,9 +281,172 @@ pub enum LocusEvent {
         new_content: String,
     },
 
+    /// Screen content from terminal state (instant, no file I/O)
+    ScreenContent {
+        pane: PaneId,
+        contents: String,
+    },
+
+    /// Screen content changed (event-driven notification)
+    ScreenChanged {
+        pane: PaneId,
+        contents: String,
+        sequence: u64,
+    },
+
+    /// Cursor position
+    CursorPosition {
+        pane: PaneId,
+        row: u16,
+        col: u16,
+    },
+
+    /// Region content (specific rows)
+    RegionContent {
+        pane: PaneId,
+        content: String,
+    },
+
+    /// Terminal dimensions
+    Dimensions {
+        pane: PaneId,
+        width: u16,
+        height: u16,
+    },
+
+    /// No changes since requested sequence
+    NoChanges {
+        sequence: u64,
+    },
+
+    /// Sequence number update
+    SequenceUpdate {
+        pane: PaneId,
+        sequence: u64,
+    },
+
+    /// List of tracked panes
+    TrackedPanes {
+        panes: Vec<String>,
+    },
+
+    /// Pane state info list
+    PaneStateInfos {
+        infos: Vec<crate::observation::PaneStateInfo>,
+    },
+
+    /// Operation timed out
+    Timeout,
+
     /// Action completed successfully
     Ok { message: String },
 
     /// Something went wrong
     Error { message: String },
+}
+
+// ============================================================================
+// Recording Types
+// ============================================================================
+
+/// Information about a past recording
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RecordingInfo {
+    pub recording_id: String,
+    pub output_dir: String,
+    pub pane_count: u32,
+    pub has_layout: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<u64>,
+}
+
+/// Events for recording operations
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RecordingEvent {
+    /// Recording started successfully
+    RecordingStarted {
+        recording_id: String,
+        pane_count: u32,
+        output_dir: String,
+    },
+
+    /// Recording stopped successfully
+    RecordingStopped {
+        recording_id: String,
+        cast_files: Vec<String>,
+        layout_file: String,
+        duration_secs: f64,
+    },
+
+    /// Recording status
+    RecordingStatus {
+        active: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        recording_id: Option<String>,
+        pane_ids: Vec<String>,
+        elapsed_secs: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        output_dir: Option<String>,
+    },
+
+    /// List of recordings
+    Recordings {
+        recordings: Vec<RecordingInfo>,
+    },
+
+    /// Action completed successfully
+    Ok {
+        message: String,
+    },
+
+    /// Something went wrong
+    Error {
+        message: String,
+    },
+}
+
+// ============================================================================
+// Render Types
+// ============================================================================
+
+/// Events for render operations
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RenderEvent {
+    /// Render progress update
+    RenderProgress {
+        percent: f64,
+        frames_written: u64,
+        elapsed_secs: f64,
+    },
+
+    /// Render completed successfully
+    RenderComplete {
+        output_path: String,
+        duration_secs: f64,
+        frame_count: u64,
+        bytes: u64,
+    },
+
+    /// Preview frame at timestamp
+    PreviewFrame {
+        content: String,
+        width: u16,
+        height: u16,
+        time: f64,
+    },
+
+    /// Recording metadata
+    RecordingInfo {
+        recording_id: String,
+        pane_count: u32,
+        duration_secs: f64,
+        layout_events: u32,
+    },
+
+    /// Something went wrong
+    Error {
+        message: String,
+    },
 }

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locus Terminal Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a1a;
+            color: #d4d4d4;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #header {
+            background: #2d2d2d;
+            border-bottom: 2px solid #3d3d3d;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #4ec9b0;
+        }
+
+        #status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ec9b0;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        #panes-container {
+            display: grid;
+            gap: 8px;
+            padding: 8px;
+            height: calc(100vh - 50px);
+            overflow: auto;
+        }
+
+        /* Auto-layout grid based on pane count */
+        #panes-container.count-1 { grid-template-columns: 1fr; }
+        #panes-container.count-2 { grid-template-columns: 1fr 1fr; }
+        #panes-container.count-3 { grid-template-columns: repeat(2, 1fr); }
+        #panes-container.count-4 { grid-template-columns: repeat(2, 1fr); }
+        #panes-container[class*="count-"] { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+
+        .pane {
+            background: #000;
+            border: 2px solid #3d3d3d;
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 300px;
+        }
+
+        .pane-header {
+            background: #2d2d2d;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: #888;
+            border-bottom: 1px solid #3d3d3d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .pane-id {
+            color: #569cd6;
+            font-weight: 600;
+        }
+
+        .pane-name {
+            color: #ce9178;
+        }
+
+        .pane-content {
+            flex: 1;
+            padding: 8px;
+            overflow: auto;
+            font-size: 13px;
+            line-height: 1.4;
+            white-space: pre;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+        }
+
+        .terminal-line {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .error {
+            color: #f48771;
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3d3d3d;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4d4d4d;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>🖥️ Locus Terminal Viewer</h1>
+        <div id="status">
+            <div class="status-indicator"></div>
+            <span id="status-text">Connected</span>
+            <span id="pane-count">0 panes</span>
+        </div>
+    </div>
+
+    <div id="panes-container" class="count-0">
+        <div class="loading">Loading panes...</div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let updateInterval = null;
+        let currentPanes = new Set();
+
+        async function fetchPanes() {
+            try {
+                const response = await fetch(`${API_BASE}/api/panes`);
+                if (!response.ok) throw new Error('Failed to fetch panes');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching panes:', error);
+                document.getElementById('status-text').textContent = 'Disconnected';
+                return [];
+            }
+        }
+
+        async function fetchPaneContent(paneId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/pane/${encodeURIComponent(paneId)}`);
+                if (!response.ok) throw new Error('Failed to fetch pane content');
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching pane ${paneId}:`, error);
+                return null;
+            }
+        }
+
+        function createPaneElement(pane) {
+            const div = document.createElement('div');
+            div.className = 'pane';
+            div.id = `pane-${pane.id}`;
+
+            const header = document.createElement('div');
+            header.className = 'pane-header';
+            header.innerHTML = `
+                <span class="pane-id">${pane.id}</span>
+                ${pane.name ? `<span class="pane-name">${pane.name}</span>` : ''}
+            `;
+
+            const content = document.createElement('div');
+            content.className = 'pane-content';
+            content.innerHTML = '<div class="loading">Loading...</div>';
+
+            div.appendChild(header);
+            div.appendChild(content);
+
+            return div;
+        }
+
+        async function updatePaneContent(paneId) {
+            const paneDiv = document.getElementById(`pane-${paneId}`);
+            if (!paneDiv) return;
+
+            const content = await fetchPaneContent(paneId);
+            if (!content) return;
+
+            const contentDiv = paneDiv.querySelector('.pane-content');
+            contentDiv.textContent = content.content;
+
+            // Auto-scroll to bottom if near bottom already
+            if (contentDiv.scrollHeight - contentDiv.scrollTop - contentDiv.clientHeight < 100) {
+                contentDiv.scrollTop = contentDiv.scrollHeight;
+            }
+        }
+
+        async function refreshPanes() {
+            const panes = await fetchPanes();
+
+            if (panes.length === 0) {
+                document.getElementById('panes-container').innerHTML =
+                    '<div class="error">No panes found. Make sure tmux is running with active panes.</div>';
+                document.getElementById('pane-count').textContent = '0 panes';
+                return;
+            }
+
+            const container = document.getElementById('panes-container');
+            const newPaneIds = new Set(panes.map(p => p.id));
+
+            // Update grid class based on count
+            container.className = `count-${panes.length}`;
+
+            // Remove panes that no longer exist
+            for (const oldId of currentPanes) {
+                if (!newPaneIds.has(oldId)) {
+                    const oldPane = document.getElementById(`pane-${oldId}`);
+                    if (oldPane) oldPane.remove();
+                    currentPanes.delete(oldId);
+                }
+            }
+
+            // Add or update panes
+            for (const pane of panes) {
+                if (!currentPanes.has(pane.id)) {
+                    // New pane
+                    const paneEl = createPaneElement(pane);
+                    container.appendChild(paneEl);
+                    currentPanes.add(pane.id);
+                }
+
+                // Update content
+                await updatePaneContent(pane.id);
+            }
+
+            document.getElementById('pane-count').textContent =
+                `${panes.length} pane${panes.length === 1 ? '' : 's'}`;
+            document.getElementById('status-text').textContent = 'Connected';
+        }
+
+        // Initialize
+        async function init() {
+            await refreshPanes();
+
+            // Refresh every 500ms
+            updateInterval = setInterval(refreshPanes, 500);
+        }
+
+        // Start when page loads
+        document.addEventListener('DOMContentLoaded', init);
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (updateInterval) clearInterval(updateInterval);
+        });
+    </script>
+</body>
+</html>

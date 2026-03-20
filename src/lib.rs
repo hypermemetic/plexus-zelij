@@ -3,6 +3,10 @@ pub mod backends;
 pub mod types;
 pub mod activation;
 pub mod activations;
+pub mod cast;
+pub mod recording;
+pub mod compositor;
+pub mod observation;
 
 // Re-exports required by plexus_macros generated code.
 // The hub_methods macro references crate::plexus::* and crate::serde_helpers.
