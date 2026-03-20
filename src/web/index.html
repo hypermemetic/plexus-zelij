@@ -351,7 +351,7 @@
             });
         });
 
-        function switchView(view) {
+        async function switchView(view) {
             currentView = view;
 
             // Update buttons
@@ -364,6 +364,9 @@
                 container.classList.remove('active');
             });
             document.getElementById(`${view}-view`).classList.add('active');
+
+            // Immediately refresh the new view
+            await refresh();
         }
 
         // API functions
@@ -638,9 +641,12 @@
                 }
             }
 
-            // Only re-render tabs if structure changed
+            // Only re-render tabs if structure changed OR tabs don't exist in DOM
             const tabStructure = JSON.stringify(sessions);
-            if (tabStructure !== lastTabStructure) {
+            const tabsContainer = document.getElementById('tmux-tabs');
+            const needsRender = tabStructure !== lastTabStructure || tabsContainer.children.length === 0;
+
+            if (needsRender) {
                 renderTabs(sessions);
                 lastTabStructure = tabStructure;
             } else {
