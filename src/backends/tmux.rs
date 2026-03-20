@@ -435,7 +435,8 @@ impl TerminalBackend for TmuxBackend {
         pane: Option<&str>,
     ) -> BackendResult<String> {
         // capture-pane → save to buffer → pipe to file
-        let mut args = vec!["capture-pane", "-p"];
+        // -e preserves ANSI escape sequences (colors)
+        let mut args = vec!["capture-pane", "-p", "-e"];
 
         if full_scrollback {
             args.push("-S");

@@ -146,6 +146,33 @@
             color: #ce9178;
         }
 
+        .download-btn {
+            background: #4ec9b0;
+            color: #000;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            font-family: inherit;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .download-btn:hover {
+            background: #5ed9c0;
+            transform: scale(1.05);
+        }
+
+        .download-btn:active {
+            transform: scale(0.95);
+        }
+
+        .download-btn.downloading {
+            background: #888;
+            cursor: wait;
+        }
+
         .pane-content {
             flex: 1;
             padding: 8px;
@@ -180,6 +207,9 @@
             white-space: nowrap;
             font-size: 12px;
             transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .tmux-tab:hover {
@@ -277,6 +307,7 @@
                 <button class="view-btn" data-view="tmux">Tmux Layout</button>
             </div>
             <div id="status">
+                <button id="download-all-btn" class="download-btn" style="display:none;" title="Download all panes as composite">💾 Download All</button>
                 <div class="status-indicator"></div>
                 <span id="status-text">Connected</span>
                 <span id="pane-count">0 panes</span>
@@ -367,6 +398,94 @@
             }
         }
 
+        // Download functions
+        async function downloadPane(paneId) {
+            const btn = event.target;
+            btn.classList.add('downloading');
+            btn.textContent = 'Recording...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/download/pane/${encodeURIComponent(paneId)}`);
+                if (!response.ok) throw new Error('Download failed');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `pane-${paneId.replace('%', '')}.cast`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                btn.textContent = '💾';
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('Failed to download recording');
+                btn.textContent = '💾';
+            } finally {
+                btn.classList.remove('downloading');
+            }
+        }
+
+        async function downloadTab(session, tabIndex) {
+            const btn = event.target;
+            btn.classList.add('downloading');
+            btn.textContent = 'Recording...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/download/tab/${encodeURIComponent(session)}/${encodeURIComponent(tabIndex)}`);
+                if (!response.ok) throw new Error('Download failed');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `tab-${session}-${tabIndex}.cast`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                btn.textContent = '💾 Tab';
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('Failed to download tab recording');
+                btn.textContent = '💾 Tab';
+            } finally {
+                btn.classList.remove('downloading');
+            }
+        }
+
+        async function downloadSession(session) {
+            const btn = event.target;
+            btn.classList.add('downloading');
+            btn.textContent = 'Recording...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/download/session/${encodeURIComponent(session)}`);
+                if (!response.ok) throw new Error('Download failed');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `session-${session}.cast`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                btn.textContent = '💾 All';
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('Failed to download session recording');
+                btn.textContent = '💾 All';
+            } finally {
+                btn.classList.remove('downloading');
+            }
+        }
+
         // Grid View Functions
         function createPaneElement(pane) {
             const div = document.createElement('div');
@@ -375,10 +494,21 @@
 
             const header = document.createElement('div');
             header.className = 'pane-header';
-            header.innerHTML = `
+
+            const info = document.createElement('div');
+            info.innerHTML = `
                 <span class="pane-id">${pane.id}</span>
                 ${pane.name ? `<span class="pane-name">${pane.name}</span>` : ''}
             `;
+
+            const downloadBtn = document.createElement('button');
+            downloadBtn.className = 'download-btn';
+            downloadBtn.textContent = '💾';
+            downloadBtn.title = 'Download pane recording (.cast)';
+            downloadBtn.onclick = () => downloadPane(pane.id);
+
+            header.appendChild(info);
+            header.appendChild(downloadBtn);
 
             const content = document.createElement('div');
             content.className = 'pane-content';
@@ -390,6 +520,9 @@
             return div;
         }
 
+        // Store previous content to detect changes
+        const paneContentCache = new Map();
+
         async function updatePaneContent(paneId, autoScroll = true) {
             const paneDiv = document.getElementById(`pane-${paneId}`);
             if (!paneDiv) return;
@@ -397,14 +530,23 @@
             const content = await fetchPaneContent(paneId);
             if (!content) return;
 
+            // Check if content changed
+            const cachedContent = paneContentCache.get(paneId);
+            if (cachedContent === content.html) {
+                return; // No change, don't update
+            }
+
             const contentDiv = paneDiv.querySelector('.pane-content');
             const wasAtBottom = contentDiv.scrollHeight - contentDiv.scrollTop - contentDiv.clientHeight < 50;
 
-            contentDiv.textContent = content.content;
+            // Use HTML for color support
+            contentDiv.innerHTML = content.html;
+            paneContentCache.set(paneId, content.html);
 
             // Auto-scroll to bottom if enabled and was already at bottom or first load
             if (autoScroll && (wasAtBottom || contentDiv.scrollTop === 0)) {
-                contentDiv.scrollTop = contentDiv.scrollHeight;
+                // Use smooth scroll to reduce flashing
+                contentDiv.scrollTo({ top: contentDiv.scrollHeight, behavior: 'instant' });
             }
         }
 
@@ -449,36 +591,45 @@
             document.getElementById('pane-count').textContent =
                 `${panes.length} pane${panes.length === 1 ? '' : 's'}`;
             document.getElementById('status-text').textContent = 'Connected';
+
+            // Show download all button if there are panes
+            const downloadAllBtn = document.getElementById('download-all-btn');
+            if (panes.length > 0) {
+                downloadAllBtn.style.display = 'block';
+                const sessionName = panes[0].session;
+                downloadAllBtn.onclick = () => downloadSession(sessionName);
+            } else {
+                downloadAllBtn.style.display = 'none';
+            }
         }
 
         // Tmux Layout View Functions
         async function refreshTmuxView() {
             const layout = await fetchLayout();
-            if (!layout) return;
+            if (!layout || !layout.sessions || layout.sessions.length === 0) return;
 
-            // Extract sessions, tabs, and panes from layout
-            // For now, we'll parse the panes list and group by session/tab
-            const panes = await fetchPanes();
-            if (panes.length === 0) return;
-
-            // Group panes by session
+            // Build sessions structure from layout
             const sessions = {};
-            for (const pane of panes) {
-                if (!sessions[pane.session]) {
-                    sessions[pane.session] = {};
+            for (const session of layout.sessions) {
+                sessions[session.name] = {};
+                for (const tab of session.tabs) {
+                    // Use tab name and index as key
+                    const tabKey = `${tab.index}:${tab.name}`;
+                    sessions[session.name][tabKey] = {
+                        index: tab.index,
+                        name: tab.name,
+                        panes: tab.panes
+                    };
                 }
-                // For now, put all panes in a single tab per session
-                const tabKey = 'default';
-                if (!sessions[pane.session][tabKey]) {
-                    sessions[pane.session][tabKey] = [];
-                }
-                sessions[pane.session][tabKey].push(pane);
             }
 
-            // Use first session if not set
+            // Use first session/tab if not set
             if (!currentSession && Object.keys(sessions).length > 0) {
                 currentSession = Object.keys(sessions)[0];
-                currentTab = 'default';
+                const firstSession = sessions[currentSession];
+                if (Object.keys(firstSession).length > 0) {
+                    currentTab = Object.keys(firstSession)[0];
+                }
             }
 
             // Render tabs
@@ -486,7 +637,7 @@
 
             // Render panes for current tab
             if (currentSession && currentTab && sessions[currentSession] && sessions[currentSession][currentTab]) {
-                await renderTmuxPanes(sessions[currentSession][currentTab]);
+                await renderTmuxPanes(sessions[currentSession][currentTab].panes);
             }
         }
 
@@ -495,20 +646,48 @@
             tabsContainer.innerHTML = '';
 
             for (const [sessionName, tabs] of Object.entries(sessions)) {
-                for (const [tabName, panes] of Object.entries(tabs)) {
+                for (const [tabKey, tabData] of Object.entries(tabs)) {
                     const tab = document.createElement('div');
                     tab.className = 'tmux-tab';
-                    if (sessionName === currentSession && tabName === currentTab) {
+                    if (sessionName === currentSession && tabKey === currentTab) {
                         tab.classList.add('active');
                     }
-                    tab.textContent = `${sessionName}:${tabName} (${panes.length})`;
-                    tab.addEventListener('click', () => {
+
+                    const tabInfo = document.createElement('span');
+                    // Display: index:name (pane_count)
+                    tabInfo.textContent = `${tabData.index}:${tabData.name} (${tabData.panes.length})`;
+                    tabInfo.addEventListener('click', () => {
                         currentSession = sessionName;
-                        currentTab = tabName;
+                        currentTab = tabKey;
                         refreshTmuxView();
                     });
+
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'download-btn';
+                    downloadBtn.textContent = '💾';
+                    downloadBtn.title = 'Download tab recording';
+                    downloadBtn.style.marginLeft = '8px';
+                    downloadBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        downloadTab(sessionName, tabData.index);
+                    };
+
+                    tab.appendChild(tabInfo);
+                    tab.appendChild(downloadBtn);
                     tabsContainer.appendChild(tab);
                 }
+            }
+
+            // Add a "Download All" button at the end
+            if (Object.keys(sessions).length > 0) {
+                const sessionName = Object.keys(sessions)[0];
+                const downloadAllBtn = document.createElement('button');
+                downloadAllBtn.className = 'download-btn';
+                downloadAllBtn.textContent = '💾 All';
+                downloadAllBtn.title = 'Download entire session recording';
+                downloadAllBtn.style.margin = '8px';
+                downloadAllBtn.onclick = () => downloadSession(sessionName);
+                tabsContainer.appendChild(downloadAllBtn);
             }
         }
 
@@ -538,7 +717,21 @@
 
                 const title = document.createElement('div');
                 title.className = 'tmux-pane-title';
-                title.textContent = `${pane.id} ${pane.name || ''}`;
+                title.style.display = 'flex';
+                title.style.justifyContent = 'space-between';
+                title.style.alignItems = 'center';
+
+                const titleText = document.createElement('span');
+                titleText.textContent = `${pane.id} ${pane.name || ''}`;
+
+                const downloadBtn = document.createElement('button');
+                downloadBtn.className = 'download-btn';
+                downloadBtn.textContent = '💾';
+                downloadBtn.title = 'Download pane recording';
+                downloadBtn.onclick = () => downloadPane(pane.id);
+
+                title.appendChild(titleText);
+                title.appendChild(downloadBtn);
 
                 const content = document.createElement('div');
                 content.className = 'tmux-pane-content';
@@ -548,12 +741,16 @@
                 paneDiv.appendChild(content);
                 container.appendChild(paneDiv);
 
-                // Fetch and render content
+                // Fetch and render content with caching to prevent flashing
                 const paneContent = await fetchPaneContent(pane.id);
                 if (paneContent) {
-                    content.textContent = paneContent.content;
-                    // Auto-scroll to bottom
-                    content.scrollTop = content.scrollHeight;
+                    const cachedContent = paneContentCache.get(`tmux-${pane.id}`);
+                    if (cachedContent !== paneContent.html) {
+                        content.innerHTML = paneContent.html;
+                        paneContentCache.set(`tmux-${pane.id}`, paneContent.html);
+                        // Auto-scroll to bottom only on content change
+                        content.scrollTo({ top: content.scrollHeight, behavior: 'instant' });
+                    }
                 }
             }
         }
