@@ -341,6 +341,7 @@
         let currentTab = null;
         let currentTmuxPanes = new Set();
         let lastTabStructure = null; // Track tab structure to avoid unnecessary re-renders
+        let sessionsData = {}; // Store sessions data globally
 
         // View switcher
         document.querySelectorAll('.view-btn').forEach(btn => {
@@ -625,6 +626,9 @@
                 }
             }
 
+            // Store sessions data globally for use in click handlers
+            sessionsData = sessions;
+
             // Use first session/tab if not set
             if (!currentSession && Object.keys(sessions).length > 0) {
                 currentSession = Object.keys(sessions)[0];
@@ -679,10 +683,17 @@
                     }
 
                     // Add click handler to entire tab div
-                    tab.addEventListener('click', () => {
+                    tab.addEventListener('click', async () => {
                         currentSession = sessionName;
                         currentTab = tabKey;
-                        refreshTmuxView();
+
+                        // Update active state immediately
+                        updateTabActiveState();
+
+                        // Render panes for this tab
+                        if (sessionsData[sessionName] && sessionsData[sessionName][tabKey]) {
+                            await renderTmuxPanes(sessionsData[sessionName][tabKey].panes);
+                        }
                     });
 
                     const tabInfo = document.createElement('span');

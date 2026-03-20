@@ -14,32 +14,43 @@ const CONFIG_FILENAME: &str = "plexus_locus.config.json";
 // Config types
 // ============================================================================
 
+/// Top-level Locus configuration file structure
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct LocusConfig {
+    /// Map of workspace names to workspace configurations
     pub workspaces: std::collections::HashMap<String, WorkspaceConfig>,
 }
 
+/// Workspace configuration defining tabs and their layouts
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct WorkspaceConfig {
+    /// List of tabs (windows) to create in this workspace
     pub tabs: Vec<TabConfig>,
 }
 
+/// Tab configuration with name, layout grid, and pane definitions
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct TabConfig {
+    /// Tab name
     pub name: String,
     /// [rows, cols] — defaults to [1, 1] (single pane)
     #[serde(default = "default_layout")]
     pub layout: [u32; 2],
+    /// Pane configurations within this tab
     #[serde(default)]
     pub panes: Vec<PaneConfig>,
 }
 
+/// Individual pane configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PaneConfig {
+    /// Optional pane name for targeting
     #[serde(default)]
     pub name: Option<String>,
+    /// Command to run in the pane
     #[serde(default)]
     pub command: Option<String>,
+    /// Working directory (supports ~/ and relative paths)
     #[serde(default)]
     pub cwd: Option<String>,
 }
@@ -71,17 +82,24 @@ fn resolve_cwd(cwd: &str, config_dir: &Path) -> PathBuf {
 // Workspace Activation
 // ============================================================================
 
+/// Workspace sub-activation — manages workspace configuration and activation
+///
+/// Loads workspace definitions from `plexus_locus.config.json` and creates
+/// multi-tab layouts with preconfigured panes, commands, and working directories.
 #[derive(Clone)]
 pub struct WorkspaceActivation {
+    /// Terminal backend instance shared across all activations
     pub(crate) backend: Arc<dyn TerminalBackend>,
 }
 
 impl WorkspaceActivation {
+    /// Create a new WorkspaceActivation with the specified backend
     pub fn new(backend: Arc<dyn TerminalBackend>) -> Self {
         Self { backend }
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "workspace",
     version = "0.1.0",

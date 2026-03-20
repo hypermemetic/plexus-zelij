@@ -17,11 +17,14 @@ use crate::types::{LocusEvent, PaneId};
 /// Observation activation - provides efficient terminal state queries
 #[derive(Clone)]
 pub struct ObservationActivation {
+    /// Terminal backend instance (currently unused but kept for future use)
     _backend: Arc<dyn TerminalBackend>,
+    /// Shared terminal state manager for in-memory VT100 state tracking
     terminal_state: Arc<TerminalStateManager>,
 }
 
 impl ObservationActivation {
+    /// Create a new ObservationActivation with backend and terminal state manager
     pub fn new(
         backend: Arc<dyn TerminalBackend>,
         terminal_state: Arc<TerminalStateManager>,
@@ -30,6 +33,7 @@ impl ObservationActivation {
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "observation",
     version = "0.1.0",

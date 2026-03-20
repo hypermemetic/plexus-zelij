@@ -46,15 +46,18 @@ async fn resolve_pane_req(
 /// Supports pane targeting via name or `%id`.
 #[derive(Clone)]
 pub struct PanesActivation {
+    /// Terminal backend instance shared across all activations
     pub(crate) backend: Arc<dyn TerminalBackend>,
 }
 
 impl PanesActivation {
+    /// Create a new PanesActivation with the specified backend
     pub fn new(backend: Arc<dyn TerminalBackend>) -> Self {
         Self { backend }
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "panes",
     version = "0.1.0",

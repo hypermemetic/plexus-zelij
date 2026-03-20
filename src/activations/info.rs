@@ -12,15 +12,18 @@ use crate::types::LocusEvent;
 /// Accessed as `locus.info.status`, `locus.info.layout`.
 #[derive(Clone)]
 pub struct InfoActivation {
+    /// Terminal backend instance shared across all activations
     pub(crate) backend: Arc<dyn TerminalBackend>,
 }
 
 impl InfoActivation {
+    /// Create a new InfoActivation with the specified backend
     pub fn new(backend: Arc<dyn TerminalBackend>) -> Self {
         Self { backend }
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "info",
     version = "0.1.0",

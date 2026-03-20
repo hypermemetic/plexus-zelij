@@ -16,21 +16,30 @@ use crate::types::{RecordingInfo, RecordingEvent};
 /// Accessed as `locus.recording.start`, `locus.recording.stop`, etc.
 #[derive(Clone)]
 pub struct RecordingActivation {
+    /// Terminal backend instance shared across all activations
     pub(crate) backend: Arc<dyn TerminalBackend>,
+    /// Currently active recording session, if any
     pub(crate) active_recording: Arc<Mutex<Option<ActiveRecording>>>,
 }
 
 /// State for an active recording session
 pub(crate) struct ActiveRecording {
+    /// Unique recording identifier (ISO 8601 timestamp)
     recording_id: String,
+    /// Terminal session being recorded
     session_id: String,
+    /// Recording session manager with per-pane recorders
     session: RecordingSession,
+    /// Layout journal for tracking pane positions over time
     journal: LayoutJournal,
+    /// Recording start timestamp
     start_time: Instant,
+    /// Output directory for .cast files and layout data
     output_dir: PathBuf,
 }
 
 impl RecordingActivation {
+    /// Create a new RecordingActivation with the specified backend
     pub fn new(backend: Arc<dyn TerminalBackend>) -> Self {
         Self { backend, active_recording: Arc::new(Mutex::new(None)) }
     }
@@ -104,6 +113,7 @@ impl RecordingActivation {
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "recording",
     version = "0.1.0",

@@ -12,15 +12,18 @@ use crate::types::{LocusEvent, SessionOpts};
 /// Accessed as `locus.sessions.list`, `locus.sessions.create`, etc.
 #[derive(Clone)]
 pub struct SessionsActivation {
+    /// Terminal backend instance shared across all activations
     pub(crate) backend: Arc<dyn TerminalBackend>,
 }
 
 impl SessionsActivation {
+    /// Create a new SessionsActivation with the specified backend
     pub fn new(backend: Arc<dyn TerminalBackend>) -> Self {
         Self { backend }
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "sessions",
     version = "0.1.0",

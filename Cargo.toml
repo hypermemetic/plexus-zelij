@@ -62,7 +62,7 @@ tokio-test = "0.4"
 
 [lints.rust]
 unsafe_code = "forbid"
-missing_docs = "warn"
+# missing_docs = "warn"  # Disabled due to plexus_macros generating undocumentable code
 unused_must_use = "deny"
 
 [lints.clippy]

@@ -12,15 +12,18 @@ use crate::types::{LocusEvent, TabOpts};
 /// Accessed as `locus.tabs.list`, `locus.tabs.create`, etc.
 #[derive(Clone)]
 pub struct TabsActivation {
+    /// Terminal backend instance shared across all activations
     pub(crate) backend: Arc<dyn TerminalBackend>,
 }
 
 impl TabsActivation {
+    /// Create a new TabsActivation with the specified backend
     pub fn new(backend: Arc<dyn TerminalBackend>) -> Self {
         Self { backend }
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "tabs",
     version = "0.1.0",

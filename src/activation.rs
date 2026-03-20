@@ -18,16 +18,36 @@ use crate::backend::TerminalBackend;
 ///   synapse locus recording start
 ///   synapse locus render render
 pub struct Locus {
+    /// Session management activation (create, list, attach, detach)
     pub sessions: SessionsActivation,
+    /// Tab/window management activation (create, list, rename, close)
     pub tabs: TabsActivation,
+    /// Pane management activation (create, capture, send-keys, close)
     pub panes: PanesActivation,
+    /// Workspace configuration activation (load, activate layouts)
     pub workspace: WorkspaceActivation,
+    /// System info activation (backend status, version)
     pub info: InfoActivation,
+    /// Recording activation (start/stop terminal recording)
     pub recording: RecordingActivation,
+    /// Rendering activation (composite multi-pane recordings)
     pub render: RenderActivation,
 }
 
 impl Locus {
+    /// Create a new Locus instance with the specified terminal backend
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - Terminal backend implementation (TmuxBackend or Zellij)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use plexus_locus::{Locus, TmuxBackend};
+    ///
+    /// let locus = Locus::new(TmuxBackend::new());
+    /// ```
     pub fn new(backend: impl TerminalBackend) -> Self {
         let backend: Arc<dyn TerminalBackend> = Arc::new(backend);
         Self {

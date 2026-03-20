@@ -22,6 +22,7 @@ impl Default for RenderActivation {
 }
 
 impl RenderActivation {
+    /// Create a new RenderActivation (stateless, no backend required)
     pub const fn new() -> Self {
         Self
     }
@@ -88,6 +89,7 @@ impl RenderActivation {
     }
 }
 
+#[allow(missing_docs)]
 #[plexus_macros::hub_methods(
     namespace = "render",
     version = "0.1.0",
