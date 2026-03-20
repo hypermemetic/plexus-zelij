@@ -232,19 +232,26 @@ impl TerminalBackend for TmuxBackend {
     async fn list_panes(
         &self,
         session: Option<&str>,
-        _tab: Option<&str>,
+        tab: Option<&str>,
     ) -> BackendResult<Vec<Pane>> {
         let format = "#{pane_id} #{pane_title} #{pane_current_command} #{pane_current_path} #{pane_active} #{window_id} #{window_index} #{session_name}";
         let mut args = vec!["list-panes", "-F", format];
 
         // -s lists all panes in session, -a lists all panes across all sessions
         let target;
-        if let Some(s) = session {
+        if let Some(t) = tab {
+            // If tab is specified, list panes for that specific window
+            target = t.to_string();
+            args.push("-t");
+            args.push(&target);
+        } else if let Some(s) = session {
+            // If only session is specified, list all panes in session
             target = s.to_string();
             args.push("-s");
             args.push("-t");
             args.push(&target);
         } else {
+            // No session or tab, list all panes
             args.push("-a");
         }
 

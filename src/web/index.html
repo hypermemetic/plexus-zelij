@@ -340,6 +340,7 @@
         let currentSession = null;
         let currentTab = null;
         let currentTmuxPanes = new Set();
+        let lastTabStructure = null; // Track tab structure to avoid unnecessary re-renders
 
         // View switcher
         document.querySelectorAll('.view-btn').forEach(btn => {
@@ -633,13 +634,34 @@
                 }
             }
 
-            // Render tabs
-            renderTabs(sessions);
+            // Only re-render tabs if structure changed
+            const tabStructure = JSON.stringify(sessions);
+            if (tabStructure !== lastTabStructure) {
+                renderTabs(sessions);
+                lastTabStructure = tabStructure;
+            } else {
+                // Just update active state without re-rendering
+                updateTabActiveState();
+            }
 
             // Render panes for current tab
             if (currentSession && currentTab && sessions[currentSession] && sessions[currentSession][currentTab]) {
                 await renderTmuxPanes(sessions[currentSession][currentTab].panes);
             }
+        }
+
+        function updateTabActiveState() {
+            // Update which tab is marked as active without re-rendering
+            const allTabs = document.querySelectorAll('.tmux-tab');
+            allTabs.forEach(tab => {
+                const sessionName = tab.dataset.session;
+                const tabKey = tab.dataset.tabKey;
+                if (sessionName === currentSession && tabKey === currentTab) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
         }
 
         function renderTabs(sessions) {
@@ -650,18 +672,22 @@
                 for (const [tabKey, tabData] of Object.entries(tabs)) {
                     const tab = document.createElement('div');
                     tab.className = 'tmux-tab';
+                    tab.dataset.session = sessionName;
+                    tab.dataset.tabKey = tabKey;
                     if (sessionName === currentSession && tabKey === currentTab) {
                         tab.classList.add('active');
                     }
 
-                    const tabInfo = document.createElement('span');
-                    // Display: index:name (pane_count)
-                    tabInfo.textContent = `${tabData.index}:${tabData.name} (${tabData.panes.length})`;
-                    tabInfo.addEventListener('click', () => {
+                    // Add click handler to entire tab div
+                    tab.addEventListener('click', () => {
                         currentSession = sessionName;
                         currentTab = tabKey;
                         refreshTmuxView();
                     });
+
+                    const tabInfo = document.createElement('span');
+                    // Display: index:name (pane_count)
+                    tabInfo.textContent = `${tabData.index}:${tabData.name} (${tabData.panes.length})`;
 
                     const downloadBtn = document.createElement('button');
                     downloadBtn.className = 'download-btn';
@@ -687,7 +713,10 @@
                 downloadAllBtn.textContent = '💾 All';
                 downloadAllBtn.title = 'Download entire session recording';
                 downloadAllBtn.style.margin = '8px';
-                downloadAllBtn.onclick = () => downloadSession(sessionName);
+                downloadAllBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    downloadSession(sessionName);
+                };
                 tabsContainer.appendChild(downloadAllBtn);
             }
         }
