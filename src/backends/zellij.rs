@@ -283,6 +283,7 @@ impl TerminalBackend for Zellij {
             focused: true,
             tab: tab_id,
             session: session_id,
+            left: None, top: None, width: None, height: None,
         })
     }
 
@@ -416,6 +417,7 @@ impl TerminalBackend for Zellij {
             focused: true,
             tab: TabId("current".into()),
             session: session_id,
+            left: None, top: None, width: None, height: None,
         })
     }
 }

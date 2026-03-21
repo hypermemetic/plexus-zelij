@@ -305,6 +305,7 @@ impl WorkspaceActivation {
                         focused: false,
                         tab: tab.id.clone(),
                         session: SessionId("current".into()),
+                        left: None, top: None, width: None, height: None,
                     });
                 }
             }

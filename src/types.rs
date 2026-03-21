@@ -52,6 +52,14 @@ pub struct Pane {
     pub focused: bool,
     pub tab: TabId,
     pub session: SessionId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

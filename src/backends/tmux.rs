@@ -234,8 +234,13 @@ impl TerminalBackend for TmuxBackend {
         session: Option<&str>,
         tab: Option<&str>,
     ) -> BackendResult<Vec<Pane>> {
-        let format = "#{pane_id} #{pane_title} #{pane_current_command} #{pane_current_path} #{pane_active} #{window_id} #{window_index} #{session_name}";
-        let mut args = vec!["list-panes", "-F", format];
+        // Use ASCII unit separator (0x1f) as delimiter to avoid splitting on spaces in titles
+        let sep = "\x1f";
+        let format = format!(
+            "#{{pane_id}}{0}#{{pane_title}}{0}#{{pane_current_command}}{0}#{{pane_current_path}}{0}#{{pane_active}}{0}#{{window_id}}{0}#{{window_index}}{0}#{{session_name}}{0}#{{pane_left}}{0}#{{pane_top}}{0}#{{pane_width}}{0}#{{pane_height}}",
+            sep
+        );
+        let mut args = vec!["list-panes", "-F", &format];
 
         // -s lists all panes in session, -a lists all panes across all sessions
         let target;
@@ -257,10 +262,12 @@ impl TerminalBackend for TmuxBackend {
 
         let output = self.exec(&args).await?;
 
-        Ok(Self::parse_format_output(&output)
-            .into_iter()
+        // Parse with unit separator (not whitespace) to handle spaces in titles
+        Ok(output.lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| line.split('\x1f').collect::<Vec<&str>>())
             .filter_map(|fields| {
-                if fields.len() < 8 {
+                if fields.len() < 12 {
                     return None;
                 }
                 let cwd = if fields[3].is_empty() {
@@ -273,10 +280,14 @@ impl TerminalBackend for TmuxBackend {
                     name: Some(fields[1].to_string()),
                     command: Some(fields[2].to_string()),
                     cwd,
-                    floating: false, // tmux doesn't have persistent floating panes
+                    floating: false,
                     focused: fields[4] == "1",
                     tab: TabId(fields[5].to_string()),
                     session: SessionId(fields[7].to_string()),
+                    left: fields[8].parse().ok(),
+                    top: fields[9].parse().ok(),
+                    width: fields[10].parse().ok(),
+                    height: fields[11].parse().ok(),
                 })
             })
             .collect())
@@ -333,9 +344,10 @@ impl TerminalBackend for TmuxBackend {
             command: opts.command.clone(),
             cwd: opts.cwd.clone(),
             floating: false,
-            focused: false, // -d flag: don't steal focus
+            focused: false,
             tab: tab_id,
             session: session_id,
+            left: None, top: None, width: None, height: None,
         })
     }
 
@@ -518,9 +530,10 @@ impl TerminalBackend for TmuxBackend {
             command: Some(opts.command.clone()),
             cwd: opts.cwd.clone(),
             floating: false,
-            focused: false, // -d flag: don't steal focus
+            focused: false,
             tab: tab_id,
             session: session_id,
+            left: None, top: None, width: None, height: None,
         })
     }
 }

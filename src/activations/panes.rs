@@ -86,6 +86,127 @@ impl PanesActivation {
     }
 
     #[plexus_macros::hub_method(
+        description = "Render an ASCII box diagram of the pane layout for a tab",
+        params(
+            tab = "Tab name or ID (default: current tab)"
+        )
+    )]
+    async fn map(
+        &self,
+        tab: Option<String>,
+    ) -> impl Stream<Item = LocusEvent> + Send + 'static {
+        let backend = self.backend.clone();
+        stream! {
+            let panes = match backend.list_panes(None, None).await {
+                Ok(p) => p,
+                Err(e) => { yield LocusEvent::Error { message: e.to_string() }; return; }
+            };
+
+            // Filter to the target tab
+            let tab_panes: Vec<&Pane> = if let Some(ref t) = tab {
+                panes.iter().filter(|p| p.tab.0 == *t).collect()
+            } else {
+                // Find focused tab (tab containing a focused pane)
+                let focused_tab = panes.iter()
+                    .find(|p| p.focused)
+                    .map(|p| p.tab.0.clone());
+                match focused_tab {
+                    Some(ref tid) => panes.iter().filter(|p| p.tab.0 == *tid).collect(),
+                    None => { yield LocusEvent::Error { message: "No focused tab found".into() }; return; }
+                }
+            };
+
+            if tab_panes.is_empty() {
+                yield LocusEvent::Error { message: format!("No panes found for tab {:?}", tab) };
+                return;
+            }
+
+            // Check if we have geometry
+            if tab_panes.iter().all(|p| p.left.is_none()) {
+                yield LocusEvent::Error { message: "No geometry data (backend doesn't support pane positions)".into() };
+                return;
+            }
+
+            // Find bounds
+            let max_right = tab_panes.iter()
+                .map(|p| p.left.unwrap_or(0) + p.width.unwrap_or(0))
+                .max().unwrap_or(0);
+            let max_bottom = tab_panes.iter()
+                .map(|p| p.top.unwrap_or(0) + p.height.unwrap_or(0))
+                .max().unwrap_or(0);
+
+            if max_right == 0 || max_bottom == 0 {
+                yield LocusEvent::Error { message: "Pane geometry has zero dimensions".into() };
+                return;
+            }
+
+            // Scale to fit ~72 cols wide
+            use ratatui::buffer::Buffer;
+            use ratatui::layout::Rect as RRect;
+            use ratatui::widgets::{Block, Borders, Widget};
+            use ratatui::style::{Style, Modifier};
+
+            let canvas_w: u16 = 72;
+            let scale_x = canvas_w as f64 / max_right as f64;
+            let scale_y = scale_x * 0.4;
+            let canvas_h: u16 = ((max_bottom as f64 * scale_y).ceil() as u16).max(1);
+
+            let area = RRect::new(0, 0, canvas_w, canvas_h);
+            let mut buf = Buffer::empty(area);
+
+            for p in &tab_panes {
+                let x = (p.left.unwrap_or(0) as f64 * scale_x) as u16;
+                let y = (p.top.unwrap_or(0) as f64 * scale_y) as u16;
+                let w = ((p.width.unwrap_or(1) as f64 * scale_x).round() as u16).max(4);
+                let h = ((p.height.unwrap_or(1) as f64 * scale_y).round() as u16).max(3);
+
+                let pane_rect = RRect::new(x, y, w.min(canvas_w - x), h.min(canvas_h - y));
+
+                // Build label
+                let name = p.name.as_deref().unwrap_or("");
+                let cmd = p.command.as_deref().unwrap_or("");
+                let title = if !name.is_empty() && !name.contains("MacBook") {
+                    format!("{} ({})", p.id.0, name)
+                } else if !cmd.is_empty() {
+                    format!("{} [{}]", p.id.0, cmd)
+                } else {
+                    p.id.0.clone()
+                };
+
+                let style = if p.focused {
+                    Style::default().add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+
+                let block = Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(style);
+
+                block.render(pane_rect, &mut buf);
+            }
+
+            // Render buffer to string
+            let mut lines: Vec<String> = Vec::new();
+            for y in 0..canvas_h {
+                let mut line = String::new();
+                for x in 0..canvas_w {
+                    let cell = &buf[(x, y)];
+                    line.push_str(cell.symbol());
+                }
+                lines.push(line.trim_end().to_string());
+            }
+            // Remove trailing empty lines
+            while lines.last().map(|l| l.is_empty()).unwrap_or(false) {
+                lines.pop();
+            }
+            let diagram = lines.join("\n");
+            yield LocusEvent::Layout { content: diagram };
+        }
+    }
+
+    #[plexus_macros::hub_method(
         description = "Create a new pane",
         params(
             name = "Pane name for tracking",
@@ -914,6 +1035,10 @@ impl PanesActivation {
                     focused: row == 0 && col == 0,
                     tab: tab_id.clone(),
                     session: SessionId("current".into()),
+                    left: None,
+                    top: None,
+                    width: None,
+                    height: None,
                 }
             }).collect();
 
