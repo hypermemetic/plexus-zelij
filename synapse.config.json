@@ -1,0 +1,22 @@
+{
+    "schema": "1.0",
+    "language": "typescript",
+    "backend": "locus",
+    "url": "ws://127.0.0.1:44480",
+    "packageManager": "npm",
+    "watch": {
+        "pollInterval": 1000,
+        "hotReload": false
+    },
+    "targets": {
+        "client": {
+            "generate": [
+                "transport",
+                "rpc",
+                "plugins"
+            ],
+            "transport": "browser",
+            "outputDir": "client"
+        }
+    }
+}

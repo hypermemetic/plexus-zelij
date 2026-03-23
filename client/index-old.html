@@ -12,7 +12,7 @@
         }
 
         :root {
-            --terminal-font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+            --terminal-font-family: 'JetBrains Mono', monospace;
             --terminal-font-size: 11px;
         }
 
@@ -327,13 +327,14 @@
             <div id="font-controls">
                 <label for="font-family">Font:</label>
                 <select id="font-family">
-                    <option value="'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Consolas', monospace">JetBrains Mono</option>
-                    <option value="'Fira Code', 'Monaco', 'Menlo', 'Consolas', monospace">Fira Code</option>
-                    <option value="'Monaco', 'Menlo', 'Consolas', monospace">Monaco</option>
-                    <option value="'Menlo', 'Consolas', monospace">Menlo</option>
-                    <option value="'Consolas', monospace">Consolas</option>
-                    <option value="'SF Mono', monospace">SF Mono</option>
-                    <option value="'Courier New', monospace">Courier New</option>
+                    <option value="JetBrains Mono" selected>JetBrains Mono</option>
+                    <option value="Fira Code">Fira Code</option>
+                    <option value="Monaco">Monaco</option>
+                    <option value="Menlo">Menlo</option>
+                    <option value="Consolas">Consolas</option>
+                    <option value="SF Mono">SF Mono</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="monospace">monospace</option>
                 </select>
                 <label for="font-size">Size:</label>
                 <select id="font-size">
@@ -391,8 +392,24 @@
 
         // Font and size controls
         function applyFontSettings(fontFamily, fontSize) {
-            document.documentElement.style.setProperty('--terminal-font-family', fontFamily);
+            console.log('Applying font settings:', { fontFamily, fontSize });
+
+            // Build proper CSS font-family value with fallbacks
+            let cssFontFamily;
+            if (fontFamily === 'monospace') {
+                cssFontFamily = 'monospace';
+            } else {
+                // Add quotes if font name has spaces, then add fallback
+                const quotedFont = fontFamily.includes(' ') ? `'${fontFamily}'` : fontFamily;
+                cssFontFamily = `${quotedFont}, monospace`;
+            }
+
+            document.documentElement.style.setProperty('--terminal-font-family', cssFontFamily);
             document.documentElement.style.setProperty('--terminal-font-size', fontSize);
+            console.log('CSS vars set:', {
+                family: getComputedStyle(document.documentElement).getPropertyValue('--terminal-font-family'),
+                size: getComputedStyle(document.documentElement).getPropertyValue('--terminal-font-size')
+            });
 
             // Save to localStorage
             localStorage.setItem('terminal-font-family', fontFamily);
@@ -406,7 +423,15 @@
 
             if (savedFamily) {
                 document.getElementById('font-family').value = savedFamily;
-                document.documentElement.style.setProperty('--terminal-font-family', savedFamily);
+                // Build proper CSS value
+                let cssFontFamily;
+                if (savedFamily === 'monospace') {
+                    cssFontFamily = 'monospace';
+                } else {
+                    const quotedFont = savedFamily.includes(' ') ? `'${savedFamily}'` : savedFamily;
+                    cssFontFamily = `${quotedFont}, monospace`;
+                }
+                document.documentElement.style.setProperty('--terminal-font-family', cssFontFamily);
             }
 
             if (savedSize) {
@@ -416,16 +441,26 @@
         }
 
         // Font family selector
-        document.getElementById('font-family').addEventListener('change', (e) => {
-            const fontSize = document.getElementById('font-size').value;
-            applyFontSettings(e.target.value, fontSize);
-        });
+        const fontFamilySelect = document.getElementById('font-family');
+        console.log('Font family select element:', fontFamilySelect);
+        if (fontFamilySelect) {
+            fontFamilySelect.addEventListener('change', (e) => {
+                console.log('Font family changed:', e.target.value);
+                const fontSize = document.getElementById('font-size').value;
+                applyFontSettings(e.target.value, fontSize);
+            });
+        }
 
         // Font size selector
-        document.getElementById('font-size').addEventListener('change', (e) => {
-            const fontFamily = document.getElementById('font-family').value;
-            applyFontSettings(fontFamily, e.target.value);
-        });
+        const fontSizeSelect = document.getElementById('font-size');
+        console.log('Font size select element:', fontSizeSelect);
+        if (fontSizeSelect) {
+            fontSizeSelect.addEventListener('change', (e) => {
+                console.log('Font size changed:', e.target.value);
+                const fontFamily = document.getElementById('font-family').value;
+                applyFontSettings(fontFamily, e.target.value);
+            });
+        }
 
         // Load settings on page load
         loadFontSettings();

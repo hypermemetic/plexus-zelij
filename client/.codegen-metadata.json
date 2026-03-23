@@ -1,0 +1,52 @@
+{
+  "cache": {
+    "file_hashes": {
+      "index.ts": "1c0bddb2ff891226",
+      "info/client.ts": "f8d103ccabdb9aa0",
+      "info/index.ts": "270443e9bbc10db9",
+      "package.json": "f544ed6e77b098f6",
+      "panes/client.ts": "74ba38bdc167db08",
+      "panes/index.ts": "5633598cd1d897c7",
+      "panes/types.ts": "23676f4edc6ea6fd",
+      "recording/client.ts": "fa066bb235e8bf8e",
+      "recording/index.ts": "0515b989699244b6",
+      "recording/types.ts": "ef9db7edcb1d3813",
+      "render/client.ts": "395676189eab4114",
+      "render/index.ts": "4759745d1eb046fc",
+      "render/types.ts": "8c62928f7180004e",
+      "rpc.ts": "e9fd65874333ae25",
+      "sessions/client.ts": "8c136faefba82d6b",
+      "sessions/index.ts": "26e7612df87b49ed",
+      "tabs/client.ts": "7a482ccb057b34f3",
+      "tabs/index.ts": "ede156c1c53acdbb",
+      "tabs/types.ts": "f144605ee880e2f6",
+      "test/smoke.test.ts": "366be9e5e82fb218",
+      "transport.ts": "8fc77d72d6b90f89",
+      "tsconfig.json": "ebf6a311e13a8eed",
+      "types.ts": "e1ab756f67bd4a6f",
+      "workspace/client.ts": "f8e3042bef491480",
+      "workspace/index.ts": "3879b7b574de5807"
+    }
+  },
+  "format_version": "2.0",
+  "generation": {
+    "ir_version": "2.0",
+    "toolchain": [
+      {
+        "tool": "synapse-cc",
+        "version": "0.3.1"
+      },
+      {
+        "tool": "synapse",
+        "version": "0.2.0.0"
+      },
+      {
+        "tool": "hub-codegen",
+        "version": "0.2.0"
+      }
+    ]
+  },
+  "source": {
+    "backend": "locus"
+  }
+}
