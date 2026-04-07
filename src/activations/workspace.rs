@@ -78,6 +78,22 @@ fn resolve_cwd(cwd: &str, config_dir: &Path) -> PathBuf {
     }
 }
 
+/// Search for a template .rhai file by name.
+/// Looks in: <dir>/<name>.rhai, <dir>/templates/<name>.rhai, ~/.config/locus/templates/<name>.rhai
+fn find_template(dir: &Path, name: &str) -> Option<PathBuf> {
+    let candidates = [
+        dir.join(format!("{name}.rhai")),
+        dir.join(format!("templates/{name}.rhai")),
+        dirs_template_path(name),
+    ];
+    candidates.into_iter().find(|p| p.exists())
+}
+
+fn dirs_template_path(name: &str) -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(format!(".config/locus/templates/{name}.rhai"))
+}
+
 // ============================================================================
 // Workspace Activation
 // ============================================================================
@@ -141,53 +157,141 @@ impl WorkspaceActivation {
     }
 
     #[plexus_macros::hub_method(
-        description = "Materialize a workspace from plexus_locus.config.json — creates all tabs, panes, and runs commands",
+        description = "List available Rhai templates",
+        params(path = "Project directory to search (default: CWD)")
+    )]
+    async fn templates(&self, path: Option<String>) -> impl Stream<Item = LocusEvent> + Send + 'static {
+        stream! {
+            let dir = PathBuf::from(path.unwrap_or_else(|| ".".into()));
+            let mut found: Vec<String> = Vec::new();
+
+            // Search in dir, dir/templates/, and ~/.config/locus/templates/
+            let search_dirs = [
+                dir.clone(),
+                dir.join("templates"),
+                PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".config/locus/templates"),
+            ];
+
+            for search_dir in &search_dirs {
+                if let Ok(mut entries) = tokio::fs::read_dir(search_dir).await {
+                    while let Ok(Some(entry)) = entries.next_entry().await {
+                        let path = entry.path();
+                        if path.extension().and_then(|e| e.to_str()) == Some("rhai") {
+                            let name = path.file_stem()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("?")
+                                .to_string();
+                            let location = search_dir.display().to_string();
+                            found.push(format!("{name} ({location})"));
+                        }
+                    }
+                }
+            }
+
+            if found.is_empty() {
+                yield LocusEvent::Ok { message: "No templates found".into() };
+            } else {
+                yield LocusEvent::Ok { message: format!("Templates:\n{}", found.join("\n")) };
+            }
+        }
+    }
+
+    #[plexus_macros::hub_method(
+        description = "Materialize a workspace. Use --workspace for config-defined workspaces, or --template for Rhai script templates with --params.",
         params(
             workspace = "Workspace name from config (default: first workspace)",
-            path = "Project directory containing plexus_locus.config.json (default: CWD)"
+            path = "Project directory containing config/templates (default: CWD)",
+            template = "Rhai template name (looks for <name>.rhai in path or ~/.config/locus/templates/)",
+            params = "Template parameters as JSON object (e.g. {\"repo\": \"/path\", \"session\": \"my-session\"})"
         )
     )]
     async fn up(
         &self,
         workspace: Option<String>,
         path: Option<String>,
+        template: Option<String>,
+        params: Option<String>,
     ) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
             let dir = PathBuf::from(path.unwrap_or_else(|| ".".into()));
-            let config_path = dir.join(CONFIG_FILENAME);
-            let config_dir = config_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            let config_dir = dir.clone();
 
-            // Read and parse config
-            let content = match tokio::fs::read_to_string(&config_path).await {
-                Ok(c) => c,
-                Err(e) => {
-                    yield LocusEvent::Error {
-                        message: format!("Cannot read {}: {}", config_path.display(), e),
-                    };
-                    return;
-                }
-            };
-            let config: LocusConfig = match serde_json::from_str(&content) {
-                Ok(c) => c,
-                Err(e) => {
-                    yield LocusEvent::Error {
-                        message: format!("Invalid config: {e}"),
-                    };
-                    return;
-                }
-            };
-
-            // Find workspace
-            let ws_name = workspace.unwrap_or_else(|| {
-                config.workspaces.keys().next().cloned().unwrap_or_default()
-            });
-            let ws = if let Some(w) = config.workspaces.get(&ws_name) { w } else {
-                let available: Vec<&String> = config.workspaces.keys().collect();
-                yield LocusEvent::Error {
-                    message: format!("Workspace '{ws_name}' not found. Available: {available:?}"),
+            // Resolve workspace config — either from template or config file
+            let (ws_name, ws) = if let Some(ref tmpl_name) = template {
+                // Template mode: find and evaluate .rhai script
+                let script_path = find_template(&dir, tmpl_name);
+                let script_path = match script_path {
+                    Some(p) => p,
+                    None => {
+                        yield LocusEvent::Error {
+                            message: format!("Template '{tmpl_name}' not found (looked in {} and ~/.config/locus/templates/)", dir.display()),
+                        };
+                        return;
+                    }
                 };
-                return;
+
+                let script = match tokio::fs::read_to_string(&script_path).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        yield LocusEvent::Error { message: format!("Cannot read template: {e}") };
+                        return;
+                    }
+                };
+
+                // Parse params JSON
+                let template_params: std::collections::HashMap<String, String> = if let Some(ref p) = params {
+                    match serde_json::from_str(p) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            yield LocusEvent::Error { message: format!("Invalid params JSON: {e}") };
+                            return;
+                        }
+                    }
+                } else {
+                    std::collections::HashMap::new()
+                };
+
+                match crate::scripting::evaluate_template(&script, template_params) {
+                    Ok(ws_config) => (tmpl_name.clone(), ws_config),
+                    Err(e) => {
+                        yield LocusEvent::Error { message: format!("Template error: {e}") };
+                        return;
+                    }
+                }
+            } else {
+                // Config file mode
+                let config_path = dir.join(CONFIG_FILENAME);
+                let content = match tokio::fs::read_to_string(&config_path).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield LocusEvent::Error {
+                            message: format!("Cannot read {}: {}", config_path.display(), e),
+                        };
+                        return;
+                    }
+                };
+                let config: LocusConfig = match serde_json::from_str(&content) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield LocusEvent::Error { message: format!("Invalid config: {e}") };
+                        return;
+                    }
+                };
+
+                let ws_name = workspace.unwrap_or_else(|| {
+                    config.workspaces.keys().next().cloned().unwrap_or_default()
+                });
+                let ws = if let Some(w) = config.workspaces.get(&ws_name) {
+                    w.clone()
+                } else {
+                    let available: Vec<&String> = config.workspaces.keys().collect();
+                    yield LocusEvent::Error {
+                        message: format!("Workspace '{ws_name}' not found. Available: {available:?}"),
+                    };
+                    return;
+                };
+                (ws_name, ws)
             };
 
             // Track all created panes for the state file
@@ -315,7 +419,7 @@ impl WorkspaceActivation {
             let _ = tokio::fs::create_dir_all(state_dir).await;
             let state = serde_json::json!({
                 "workspace": ws_name,
-                "config_path": config_path.display().to_string(),
+                "config_dir": config_dir.display().to_string(),
                 "tabs": all_created_tabs,
             });
             let state_path = format!("{state_dir}/{ws_name}.json");

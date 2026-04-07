@@ -46,6 +46,8 @@ pub mod compositor;
 pub mod observation;
 /// Terminal recording engine using pipe-pane
 pub mod recording;
+/// Rhai scripting engine for workspace templates
+pub mod scripting;
 /// Common types used across the crate
 pub mod types;
 

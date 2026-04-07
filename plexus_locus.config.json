@@ -14,6 +14,57 @@
         }
       ]
     },
+    "form veritas": {
+      "tabs": [
+        {
+          "name": "plexus-locus",
+          "layout": [1, 1],
+          "panes": [
+            { "name": "locus-dev", "cwd": "~/dev/controlflow/hypermemetic/plexus-locus" }
+          ]
+        },
+        {
+          "name": "form-veritas-main",
+          "layout_string": "a00d,265x82,0,0{132x82,0,0[132x41,0,0,2,132x20,0,42{66x20,0,42,5,65x20,67,42,19},132x19,0,63{66x19,0,63,16,65x19,67,63,21}],132x82,133,0[132x62,133,0{66x62,133,0[66x31,133,0,6,66x30,133,32,12],65x62,200,0[65x31,200,0,8,65x15,200,32,9,65x14,200,48,10]},132x19,133,63,7]}",
+          "panes": [
+            { "name": "claude-main", "command": "claude --dangerously-skip-permissions", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2" },
+            { "name": "claude-uscis", "command": "claude --dangerously-skip-permissions", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2/uscis-web" },
+            { "name": "git-sandbox-auth", "command": "git-sandbox start -s auth-context -a", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2/uscis-web" },
+            { "name": "claude-graph-1", "command": "claude --dangerously-skip-permissions --continue", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2/uscis-web" },
+            { "name": "claude-graph-2", "command": "claude --dangerously-skip-permissions --continue", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2/uscis-web" },
+            { "name": "bun-dev", "command": "bun dev", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2/uscis-web" },
+            { "name": "shell-fv2", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2" },
+            { "name": "cargo-watch", "command": "cargo watch -x run -w src", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2" },
+            { "name": "claude-substrate", "command": "claude --dangerously-skip-permissions", "cwd": "~/dev/controlflow/hypermemetic/plexus-substrate" },
+            { "name": "shell-substrate", "cwd": "~/dev/controlflow/hypermemetic/plexus-substrate" },
+            { "name": "shell-uscis", "cwd": "~/dev/hyperforge/workspaces/sshmendez/orgs/OneBigMediaCo/FormVeritasV2/uscis-web" }
+          ]
+        },
+        {
+          "name": "hyperforge",
+          "layout_string": "dbca,265x82,0,0[265x41,0,0,13,265x40,0,42{132x40,0,42,14,132x40,133,42,18}]",
+          "panes": [
+            { "name": "claude-forge", "command": "claude --continue", "cwd": "~/dev/controlflow/hypermemetic/hyperforge" },
+            { "name": "claude-forge-branch", "command": "claude --continue", "cwd": "~/dev/controlflow/hypermemetic/hyperforge" },
+            { "name": "shell-forge-web", "cwd": "~/dev/controlflow/hypermemetic/hyperforge-web" }
+          ]
+        },
+        {
+          "name": "system",
+          "layout": [1, 1],
+          "panes": [
+            { "name": "claude-system", "command": "claude --dangerously-skip-permissions", "cwd": "~" }
+          ]
+        },
+        {
+          "name": "git-sandbox",
+          "layout": [1, 1],
+          "panes": [
+            { "name": "claude-sandbox", "command": "claude --dangerously-skip-permissions", "cwd": "~/dev/controlflow/juggernautlabs/git-sandbox" }
+          ]
+        }
+      ]
+    },
     "dev": {
       "tabs": [
         {
