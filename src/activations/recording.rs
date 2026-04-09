@@ -114,13 +114,13 @@ impl RecordingActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "recording",
     version = "0.1.0",
     description = "Terminal session recording management"
 )]
 impl RecordingActivation {
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Start recording all panes in a session",
         params(
             session = "Session name to record (default: current session)",
@@ -239,7 +239,7 @@ impl RecordingActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Stop the active recording",
         params(recording_id = "Recording ID to stop (default: active recording)")
     )]
@@ -312,7 +312,7 @@ impl RecordingActivation {
         }
     }
 
-    #[plexus_macros::hub_method(description = "Get status of the active recording")]
+    #[plexus_macros::method(description = "Get status of the active recording")]
     async fn status(&self) -> impl Stream<Item = RecordingEvent> + Send + 'static {
         let active_recording = self.active_recording.clone();
 
@@ -344,7 +344,7 @@ impl RecordingActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Manually trigger a layout snapshot",
         params(recording_id = "Recording ID (default: active recording)")
     )]
@@ -391,7 +391,7 @@ impl RecordingActivation {
         }
     }
 
-    #[plexus_macros::hub_method(description = "List past recordings")]
+    #[plexus_macros::method(description = "List past recordings")]
     async fn list(&self) -> impl Stream<Item = RecordingEvent> + Send + 'static {
         stream! {
             let recordings = Self::list_recordings().await;

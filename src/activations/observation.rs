@@ -34,13 +34,13 @@ impl ObservationActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "observation",
     version = "0.1.0",
     description = "Efficient terminal state observation with zero file I/O"
 )]
 impl ObservationActivation {
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Get current screen contents from in-memory state (instant, no file I/O)",
         params(pane = "Pane ID (e.g. '%5')")
     )]
@@ -63,7 +63,7 @@ impl ObservationActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Get cursor position (row, col) - 0-indexed",
         params(pane = "Pane ID (e.g. '%5')")
     )]
@@ -87,7 +87,7 @@ impl ObservationActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Get specific region of terminal (e.g., last N lines)",
         params(
             pane = "Pane ID (e.g. '%5')",
@@ -120,7 +120,7 @@ impl ObservationActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Wait for terminal content to change (event-driven, no polling!)",
         params(
             pane = "Pane ID (e.g. '%5')",
@@ -169,7 +169,7 @@ impl ObservationActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Get changes since a specific sequence number (incremental fetching)",
         params(pane = "Pane ID (e.g. '%5')", sequence = "Last known sequence number")
     )]
@@ -208,7 +208,7 @@ impl ObservationActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Get terminal dimensions (width, height)",
         params(pane = "Pane ID (e.g. '%5')")
     )]
@@ -235,7 +235,7 @@ impl ObservationActivation {
         }
     }
 
-    #[plexus_macros::hub_method(description = "List all panes being tracked in terminal state")]
+    #[plexus_macros::method(description = "List all panes being tracked in terminal state")]
     async fn list_tracked(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let terminal_state = self.terminal_state.clone();
         stream! {
@@ -244,7 +244,7 @@ impl ObservationActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Get info about all tracked panes (dimensions, sequence, last update)"
     )]
     async fn get_all_info(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {

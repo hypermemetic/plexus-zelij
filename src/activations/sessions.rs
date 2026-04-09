@@ -24,13 +24,13 @@ impl SessionsActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "sessions",
     version = "0.1.0",
     description = "Terminal session management"
 )]
 impl SessionsActivation {
-    #[plexus_macros::hub_method(description = "List all terminal sessions")]
+    #[plexus_macros::method(description = "List all terminal sessions")]
     async fn list(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
@@ -41,7 +41,7 @@ impl SessionsActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Create a new terminal session",
         params(
             name = "Session name",
@@ -69,7 +69,7 @@ impl SessionsActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Kill a terminal session",
         params(name = "Session name to kill")
     )]

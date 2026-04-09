@@ -24,13 +24,13 @@ impl TabsActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "tabs",
     version = "0.1.0",
     description = "Terminal tab management"
 )]
 impl TabsActivation {
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "List tabs in a session",
         params(session = "Target session (default: current)")
     )]
@@ -47,7 +47,7 @@ impl TabsActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Create a new tab",
         params(
             name = "Tab name",
@@ -88,7 +88,7 @@ impl TabsActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Close a tab by index",
         params(index = "Tab index", session = "Target session (default: current)")
     )]
@@ -106,7 +106,7 @@ impl TabsActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Focus a tab by index",
         params(index = "Tab index", session = "Target session (default: current)")
     )]
@@ -124,7 +124,7 @@ impl TabsActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Rename a tab",
         params(
             index = "Tab index",

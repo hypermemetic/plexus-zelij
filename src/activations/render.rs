@@ -90,13 +90,13 @@ impl RenderActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "render",
     version = "0.1.0",
     description = "Render recordings to composite .cast files"
 )]
 impl RenderActivation {
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Render a recording to a composite .cast file",
         params(
             recording_dir = "Path to recording directory (default: most recent recording)",
@@ -218,7 +218,7 @@ impl RenderActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Render a single frame preview at a specific timestamp",
         params(
             recording_dir = "Path to recording directory (default: most recent recording)",
@@ -292,7 +292,7 @@ impl RenderActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Get recording metadata and information",
         params(
             recording_dir = "Path to recording directory (default: most recent recording)",

@@ -24,13 +24,13 @@ impl InfoActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "info",
     version = "0.1.0",
     description = "Backend status and layout info"
 )]
 impl InfoActivation {
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Check which terminal backend is active and if it's available"
     )]
     async fn status(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
@@ -46,7 +46,7 @@ impl InfoActivation {
         }
     }
 
-    #[plexus_macros::hub_method(description = "Dump the current layout definition")]
+    #[plexus_macros::method(description = "Dump the current layout definition")]
     async fn layout(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {

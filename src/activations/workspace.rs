@@ -116,13 +116,13 @@ impl WorkspaceActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "workspace",
     version = "0.1.0",
     description = "Workspace lifecycle from plexus_locus.config.json"
 )]
 impl WorkspaceActivation {
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Show the config file contents",
         params(path = "Project directory containing plexus_locus.config.json (default: CWD)")
     )]
@@ -156,7 +156,7 @@ impl WorkspaceActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "List available Rhai templates",
         params(path = "Project directory to search (default: CWD)")
     )]
@@ -196,7 +196,7 @@ impl WorkspaceActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Materialize a workspace. Use --workspace for config-defined workspaces, or --template for Rhai script templates with --params.",
         params(
             workspace = "Workspace name from config (default: first workspace)",
@@ -436,7 +436,7 @@ impl WorkspaceActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Tear down a workspace — closes all tabs created by `up`",
         params(
             workspace = "Workspace name to tear down",

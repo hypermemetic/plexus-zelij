@@ -58,13 +58,13 @@ impl PanesActivation {
 }
 
 #[allow(missing_docs)]
-#[plexus_macros::hub_methods(
+#[plexus_macros::activation(
     namespace = "panes",
     version = "0.1.0",
     description = "Terminal pane management with targeting"
 )]
 impl PanesActivation {
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "List all panes",
         params(
             session = "Filter by session (default: all sessions)",
@@ -85,7 +85,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Render an ASCII box diagram of the pane layout for a tab",
         params(
             tab = "Tab name or ID (default: current tab)"
@@ -206,7 +206,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Create a new pane",
         params(
             name = "Pane name for tracking",
@@ -256,7 +256,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Close a pane",
         params(pane = "Pane name or ID (e.g. 'my-pane' or '%5'). Default: focused pane")
     )]
@@ -276,7 +276,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Move focus to an adjacent pane",
         params(direction = "Direction: up, down, left, right")
     )]
@@ -300,7 +300,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Rename a pane",
         params(
             name = "New pane name/title",
@@ -324,7 +324,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(description = "Toggle floating panes visibility (zellij only)")]
+    #[plexus_macros::method(description = "Toggle floating panes visibility (zellij only)")]
     async fn toggle_floating(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
@@ -335,7 +335,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(description = "Toggle fullscreen/zoom for a pane")]
+    #[plexus_macros::method(description = "Toggle fullscreen/zoom for a pane")]
     async fn toggle_fullscreen(&self) -> impl Stream<Item = LocusEvent> + Send + 'static {
         let backend = self.backend.clone();
         stream! {
@@ -346,7 +346,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Resize a pane",
         params(
             direction = "Direction: up, down, left, right",
@@ -382,7 +382,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Send keystrokes to a pane",
         params(
             chars = "Characters to send (use \\n for enter)",
@@ -412,7 +412,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Send a command to any shell (including containers, ssh, etc.) and return the screen diff. Works everywhere — no hooks needed, pure screen observation.",
         params(
             command = "Command text to send (Enter is appended automatically)",
@@ -521,7 +521,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Capture the screen content of a pane",
         params(
             full = "Include full scrollback history (default: false)",
@@ -554,7 +554,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Execute a command in an existing pane via temp script (avoids send-keys length/quoting issues). Waits for the command to start and optionally streams until completion.",
         params(
             command = "Command to execute (can be arbitrarily long, handles all quoting)",
@@ -776,7 +776,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Check the state of the last exec'd command in a pane. Returns command_started (still running), command_exited (finished with exit code), or error (no exec in this pane).",
         params(
             pane = "Pane ID to check (e.g. %5)",
@@ -848,7 +848,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Run a command in a new pane",
         params(
             command = "Command to execute",
@@ -902,7 +902,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Create a grid layout of panes in a new tab. Returns all pane IDs. Optionally runs a command in each cell.",
         params(
             rows = "Number of rows",
@@ -1051,7 +1051,7 @@ impl PanesActivation {
         }
     }
 
-    #[plexus_macros::hub_method(
+    #[plexus_macros::method(
         description = "Run commands in multiple panes in parallel. Each command is sent via send (screen-diff based, works in any shell).",
         params(
             panes = "Pane names or IDs",
