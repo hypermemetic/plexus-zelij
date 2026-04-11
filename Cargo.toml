@@ -107,7 +107,3 @@ float_cmp = "allow"
 #expect_used = "allow"  # Keep this as warn
 #panic = "allow"        # Keep this as warn
 
-[patch.crates-io]
-plexus-core = { path = "../plexus-core" }
-plexus-macros = { path = "../plexus-macros" }
-plexus-transport = { path = "../plexus-transport" }
